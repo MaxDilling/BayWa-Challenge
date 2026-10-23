@@ -38,7 +38,7 @@ class ImportReport:
 
 
 MISSING = {"", "nan", "na", "n/a", "#n/a", "#nv", "null", "none", "-"}
-DELIMITERS = ["\t", ";", ","]
+DELIMITERS = ["\t", ";", ",", "|"]
 NUMBER = re.compile(r"[+-]?(\d+([.,]\d*)?|[.,]\d+)([eE][+-]?\d+)?", re.ASCII)
 THOUSANDS_DOT = re.compile(r"[+-]?\d{1,3}(\.\d{3})+,\d*", re.ASCII)
 THOUSANDS_COMMA = re.compile(r"[+-]?\d{1,3}(,\d{3})+\.\d*", re.ASCII)
@@ -73,7 +73,7 @@ def read_table(text: str) -> Table:
         if s > score:
             score, delimiter, width = s, d, w
     if not delimiter:
-        raise CsvError('Could not detect the column separator (expected ";", "," or tab).')
+        raise CsvError('Could not detect the column separator (expected ";", ",", "|" or tab).')
     cells = [[_unquote(c) for c in s.split(delimiter)] for _, s in lines]
     first = next((i for i, c in enumerate(cells) if len(c) == width and any(map(_looks_like_data, c))), None)
     if first is None:

@@ -9,7 +9,7 @@ export interface Table {
 }
 
 const MISSING = new Set(['', 'nan', 'na', 'n/a', '#n/a', '#nv', 'null', 'none', '-'])
-const DELIMITERS = ['\t', ';', ',']
+const DELIMITERS = ['\t', ';', ',', '|']
 
 export function readTable(text: string): Table {
   const lines = text
@@ -26,7 +26,7 @@ export function readTable(text: string): Table {
     if (score > best.score) best = { score, delimiter, width }
   }
   const { delimiter, width } = best
-  if (!delimiter) throw new ImportError('Could not detect the column separator (expected ";", "," or tab).')
+  if (!delimiter) throw new ImportError('Could not detect the column separator (expected ";", ",", "|" or tab).')
   const split = (s: string) => s.split(delimiter).map((c) => c.trim().replace(/^"(.*)"$/, '$1').trim())
   const cells = lines.map((l) => split(l.text))
   const first = cells.findIndex((c) => c.length === width && c.some((x) => typeof parseNumber(x) === 'number' || looksLikeTimestamp(x) || DATE_ONLY.test(x)))

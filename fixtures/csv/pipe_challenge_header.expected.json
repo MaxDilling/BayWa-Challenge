@@ -1,0 +1,21 @@
+[
+ {
+  "id": "pipe_challenge_header",
+  "grid": {
+   "t0": 1790805600000,
+   "stepS": 600,
+   "values": [
+    7.25,
+    null,
+    7.5
+   ]
+  },
+  "report": {
+   "rows": 3,
+   "measured": 2,
+   "missing": 1,
+   "negative": 0,
+   "ignoredColumns": []
+  }
+ }
+]

@@ -5,40 +5,218 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/*
+ * Design tokens in two layers: the palette (:root, raw values) and semantic tokens that only point at the
+ * palette. Components and charts use semantic tokens only; Tailwind's default palette is switched off so
+ * that `bg-green-600` and friends cannot sneak in. Palette values are hex, not oklch: the charts read the
+ * tokens at runtime and ECharts does not parse oklch.
+ */
+
+:root {
+    --brand-50: #eefaf2;
+    --brand-100: #d5f2df;
+    --brand-200: #ace4c2;
+    --brand-300: #78cf9c;
+    --brand-400: #45b676;
+    --brand-500: #229c5a;
+    --brand-600: #158249;
+    --brand-700: #12683c;
+    --brand-800: #125332;
+    --brand-900: #0f442a;
+    --brand-950: #062617;
+
+    --neutral-0: #ffffff;
+    --neutral-50: #f6f8f7;
+    --neutral-100: #edf0ef;
+    --neutral-200: #dfe4e2;
+    --neutral-300: #c6cdca;
+    --neutral-400: #97a19d;
+    --neutral-500: #69736f;
+    --neutral-600: #4e5754;
+    --neutral-700: #3a423f;
+    --neutral-800: #252b29;
+    --neutral-900: #161b19;
+    --neutral-950: #0c0f0e;
+
+    --blue-300: #93b4e6;
+    --blue-400: #6b95db;
+    --blue-500: #4677c8;
+    --blue-600: #345fa8;
+
+    --amber-100: #fcefd2;
+    --amber-300: #f5c868;
+    --amber-400: #eeae33;
+    --amber-500: #d99413;
+    --amber-600: #b4740c;
+    --amber-900: #4a300a;
+
+    --red-50: #fdf1f0;
+    --red-100: #fae0de;
+    --red-300: #eea19b;
+    --red-400: #e3776f;
+    --red-500: #d1524a;
+    --red-600: #b43c35;
+    --red-900: #3f1714;
+    --red-950: #2a100e;
+
+    --font-body: 'Geist Variable', ui-sans-serif, system-ui, sans-serif;
+    --font-formula: 'STIX Two Math', 'Cambria Math', 'Latin Modern Math', math;
+
+    /* Surfaces, text, borders */
+    --background: var(--neutral-50);
+    --foreground: var(--neutral-900);
+    --card: var(--neutral-0);
+    --card-foreground: var(--neutral-900);
+    --popover: var(--neutral-0);
+    --popover-foreground: var(--neutral-900);
+    --muted: var(--neutral-100);
+    --muted-foreground: var(--neutral-500);
+    --secondary: var(--neutral-100);
+    --secondary-foreground: var(--neutral-800);
+    --border: var(--neutral-200);
+    --input: var(--neutral-300);
+
+    /* Primary and accent */
+    --primary: var(--brand-600);
+    --primary-foreground: var(--neutral-0);
+    --accent: var(--brand-50);
+    --accent-foreground: var(--brand-800);
+    --ring: var(--brand-400);
+
+    /* Status */
+    --success: var(--brand-600);
+    --success-soft: var(--brand-50);
+    --warning: var(--amber-600);
+    --warning-soft: var(--amber-100);
+    --destructive: var(--red-600);
+    --destructive-soft: var(--red-50);
+
+    /* Domain colours: one meaning, one colour, in every view */
+    --series-measured: var(--neutral-800);
+    --series-reference: var(--blue-500);
+    --series-prediction: var(--brand-600);
+    --series-band: var(--brand-400);
+    --series-outage: var(--red-100);
+    --series-outage-edge: var(--red-400);
+    --series-gap: var(--neutral-200);
+    --series-energy: var(--amber-500);
+
+    /* Chart geometry (unitless numbers are pixels for ECharts) */
+    --chart-grid: var(--neutral-100);
+    --chart-axis: var(--neutral-300);
+    --chart-band-opacity: 0.28;
+    --chart-area-opacity: 0.16;
+    --chart-line: 2;
+    --chart-line-thin: 1.25;
+    --chart-point: 3;
+
+    /* Shape */
+    --radius: 0.5rem;
+    --shadow-card-value: 0 1px 2px 0 color-mix(in srgb, var(--neutral-900) 6%, transparent);
+    --shadow-raised-value: 0 4px 16px -4px color-mix(in srgb, var(--neutral-900) 14%, transparent);
+
+    /* Spacing and sizes */
+    --card-pad: 1.25rem;
+    --card-pad-sm: 0.875rem;
+    --section-gap: 1.25rem;
+    --page-width: 82rem;
+    --chart-height: 21rem;
+    --chart-height-sm: 15rem;
+    --chart-height-xs: 7rem;
+
+    /* Type scale: key figure, heading, body, label */
+    --size-kpi: 2.75rem;
+    --size-stat: 1.5rem;
+    --size-heading: 1.375rem;
+    --size-body: 0.875rem;
+    --size-label: 0.75rem;
+}
+
+.dark {
+    --background: var(--neutral-950);
+    --foreground: var(--neutral-50);
+    --card: var(--neutral-900);
+    --card-foreground: var(--neutral-50);
+    --popover: var(--neutral-900);
+    --popover-foreground: var(--neutral-50);
+    --muted: var(--neutral-800);
+    --muted-foreground: var(--neutral-400);
+    --secondary: var(--neutral-800);
+    --secondary-foreground: var(--neutral-100);
+    --border: var(--neutral-800);
+    --input: var(--neutral-700);
+
+    --primary: var(--brand-400);
+    --primary-foreground: var(--neutral-950);
+    --accent: var(--brand-950);
+    --accent-foreground: var(--brand-200);
+    --ring: var(--brand-500);
+
+    --success: var(--brand-400);
+    --success-soft: var(--brand-950);
+    --warning: var(--amber-400);
+    --warning-soft: var(--amber-900);
+    --destructive: var(--red-400);
+    --destructive-soft: var(--red-950);
+
+    --series-measured: var(--neutral-100);
+    --series-reference: var(--blue-400);
+    --series-prediction: var(--brand-400);
+    --series-band: var(--brand-300);
+    --series-outage: var(--red-950);
+    --series-outage-edge: var(--red-500);
+    --series-gap: var(--neutral-800);
+    --series-energy: var(--amber-400);
+
+    --chart-grid: var(--neutral-800);
+    --chart-axis: var(--neutral-700);
+    --chart-band-opacity: 0.22;
+
+    --shadow-card-value: 0 1px 2px 0 color-mix(in srgb, var(--neutral-950) 40%, transparent);
+    --shadow-raised-value: 0 4px 16px -4px color-mix(in srgb, var(--neutral-950) 60%, transparent);
+}
+
+@theme {
+    --color-*: initial;
+}
+
 @theme inline {
-    --font-heading: var(--font-sans);
-    --font-sans: 'Geist Variable', sans-serif;
-    --color-sidebar-ring: var(--sidebar-ring);
-    --color-sidebar-border: var(--sidebar-border);
-    --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
-    --color-sidebar-accent: var(--sidebar-accent);
-    --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
-    --color-sidebar-primary: var(--sidebar-primary);
-    --color-sidebar-foreground: var(--sidebar-foreground);
-    --color-sidebar: var(--sidebar);
-    --color-chart-5: var(--chart-5);
-    --color-chart-4: var(--chart-4);
-    --color-chart-3: var(--chart-3);
-    --color-chart-2: var(--chart-2);
-    --color-chart-1: var(--chart-1);
-    --color-ring: var(--ring);
-    --color-input: var(--input);
-    --color-border: var(--border);
-    --color-destructive: var(--destructive);
-    --color-accent-foreground: var(--accent-foreground);
-    --color-accent: var(--accent);
-    --color-muted-foreground: var(--muted-foreground);
-    --color-muted: var(--muted);
-    --color-secondary-foreground: var(--secondary-foreground);
-    --color-secondary: var(--secondary);
-    --color-primary-foreground: var(--primary-foreground);
-    --color-primary: var(--primary);
-    --color-popover-foreground: var(--popover-foreground);
-    --color-popover: var(--popover);
-    --color-card-foreground: var(--card-foreground);
-    --color-card: var(--card);
-    --color-foreground: var(--foreground);
+    --font-sans: var(--font-body);
+    --font-heading: var(--font-body);
+
     --color-background: var(--background);
+    --color-foreground: var(--foreground);
+    --color-card: var(--card);
+    --color-card-foreground: var(--card-foreground);
+    --color-popover: var(--popover);
+    --color-popover-foreground: var(--popover-foreground);
+    --color-muted: var(--muted);
+    --color-muted-foreground: var(--muted-foreground);
+    --color-secondary: var(--secondary);
+    --color-secondary-foreground: var(--secondary-foreground);
+    --color-border: var(--border);
+    --color-input: var(--input);
+    --color-primary: var(--primary);
+    --color-primary-foreground: var(--primary-foreground);
+    --color-accent: var(--accent);
+    --color-accent-foreground: var(--accent-foreground);
+    --color-ring: var(--ring);
+    --color-success: var(--success);
+    --color-success-soft: var(--success-soft);
+    --color-warning: var(--warning);
+    --color-warning-soft: var(--warning-soft);
+    --color-destructive: var(--destructive);
+    --color-destructive-soft: var(--destructive-soft);
+
+    --color-measured: var(--series-measured);
+    --color-reference: var(--series-reference);
+    --color-prediction: var(--series-prediction);
+    --color-band: var(--series-band);
+    --color-outage: var(--series-outage);
+    --color-outage-edge: var(--series-outage-edge);
+    --color-gap: var(--series-gap);
+    --color-energy: var(--series-energy);
+
     --radius-sm: calc(var(--radius) * 0.6);
     --radius-md: calc(var(--radius) * 0.8);
     --radius-lg: var(--radius);
@@ -46,85 +224,50 @@
     --radius-2xl: calc(var(--radius) * 1.8);
     --radius-3xl: calc(var(--radius) * 2.2);
     --radius-4xl: calc(var(--radius) * 2.6);
+
+    --shadow-card: var(--shadow-card-value);
+    --shadow-raised: var(--shadow-raised-value);
+
+    --spacing-card: var(--card-pad);
+    --spacing-card-sm: var(--card-pad-sm);
+    --spacing-section: var(--section-gap);
+    --spacing-chart: var(--chart-height);
+    --spacing-chart-sm: var(--chart-height-sm);
+    --spacing-chart-xs: var(--chart-height-xs);
+    --container-page: var(--page-width);
+
+    --text-kpi: var(--size-kpi);
+    --text-kpi--line-height: 1.05;
+    --text-stat: var(--size-stat);
+    --text-stat--line-height: 1.15;
+    --text-heading: var(--size-heading);
+    --text-heading--line-height: 1.25;
+    --text-body: var(--size-body);
+    --text-body--line-height: 1.5;
+    --text-label: var(--size-label);
+    --text-label--line-height: 1.35;
 }
 
-:root {
-    --background: oklch(1 0 0);
-    --foreground: oklch(0.145 0 0);
-    --card: oklch(1 0 0);
-    --card-foreground: oklch(0.145 0 0);
-    --popover: oklch(1 0 0);
-    --popover-foreground: oklch(0.145 0 0);
-    --primary: oklch(0.205 0 0);
-    --primary-foreground: oklch(0.985 0 0);
-    --secondary: oklch(0.97 0 0);
-    --secondary-foreground: oklch(0.205 0 0);
-    --muted: oklch(0.97 0 0);
-    --muted-foreground: oklch(0.556 0 0);
-    --accent: oklch(0.97 0 0);
-    --accent-foreground: oklch(0.205 0 0);
-    --destructive: oklch(0.577 0.245 27.325);
-    --border: oklch(0.922 0 0);
-    --input: oklch(0.922 0 0);
-    --ring: oklch(0.708 0 0);
-    --chart-1: oklch(0.87 0 0);
-    --chart-2: oklch(0.556 0 0);
-    --chart-3: oklch(0.439 0 0);
-    --chart-4: oklch(0.371 0 0);
-    --chart-5: oklch(0.269 0 0);
-    --radius: 0.625rem;
-    --sidebar: oklch(0.985 0 0);
-    --sidebar-foreground: oklch(0.145 0 0);
-    --sidebar-primary: oklch(0.205 0 0);
-    --sidebar-primary-foreground: oklch(0.985 0 0);
-    --sidebar-accent: oklch(0.97 0 0);
-    --sidebar-accent-foreground: oklch(0.205 0 0);
-    --sidebar-border: oklch(0.922 0 0);
-    --sidebar-ring: oklch(0.708 0 0);
+/* shadcn's Card sets its own padding; ours comes from the spacing tokens. Unlayered, so it wins. */
+[data-slot="card"] {
+    --card-spacing: var(--card-pad);
 }
 
-.dark {
-    --background: oklch(0.145 0 0);
-    --foreground: oklch(0.985 0 0);
-    --card: oklch(0.205 0 0);
-    --card-foreground: oklch(0.985 0 0);
-    --popover: oklch(0.205 0 0);
-    --popover-foreground: oklch(0.985 0 0);
-    --primary: oklch(0.922 0 0);
-    --primary-foreground: oklch(0.205 0 0);
-    --secondary: oklch(0.269 0 0);
-    --secondary-foreground: oklch(0.985 0 0);
-    --muted: oklch(0.269 0 0);
-    --muted-foreground: oklch(0.708 0 0);
-    --accent: oklch(0.269 0 0);
-    --accent-foreground: oklch(0.985 0 0);
-    --destructive: oklch(0.704 0.191 22.216);
-    --border: oklch(1 0 0 / 10%);
-    --input: oklch(1 0 0 / 15%);
-    --ring: oklch(0.556 0 0);
-    --chart-1: oklch(0.87 0 0);
-    --chart-2: oklch(0.556 0 0);
-    --chart-3: oklch(0.439 0 0);
-    --chart-4: oklch(0.371 0 0);
-    --chart-5: oklch(0.269 0 0);
-    --sidebar: oklch(0.205 0 0);
-    --sidebar-foreground: oklch(0.985 0 0);
-    --sidebar-primary: oklch(0.488 0.243 264.376);
-    --sidebar-primary-foreground: oklch(0.985 0 0);
-    --sidebar-accent: oklch(0.269 0 0);
-    --sidebar-accent-foreground: oklch(0.985 0 0);
-    --sidebar-border: oklch(1 0 0 / 10%);
-    --sidebar-ring: oklch(0.556 0 0);
+[data-slot="card"][data-size="sm"] {
+    --card-spacing: var(--card-pad-sm);
 }
 
 @layer base {
-  * {
-    @apply border-border outline-ring/50;
+    * {
+        @apply border-border outline-ring/50;
     }
-  body {
-    @apply bg-background text-foreground;
+    body {
+        @apply bg-background text-body text-foreground antialiased;
     }
-  html {
-    @apply font-sans;
+    html {
+        @apply font-sans;
+    }
+    math {
+        font-family: var(--font-formula);
     }
 }

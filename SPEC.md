@@ -144,8 +144,8 @@ Energie je Zeitschritt = Leistung (kW) × 1/6 h.
 
 - `p_mean_kw` ist E[P(v)] mit v ~ N(mean, std²), Gauß-Hermite mit 20 Stützstellen. `p_q10_kw`/`p_q90_kw` sind P(q10)/P(q90).
 - **Konvention:** P10 = 10-%-Quantil (niedriger Wert), P90 = 90-%-Quantil (hoher Wert), wie `q10`/`q90`. In Windgutachten heißt der *konservative* Wert oft „P90“ (Überschreitungswahrscheinlichkeit); im Bericht deshalb immer „10 % / 90 % Quantil“ dazuschreiben.
-- `kwh_p10`/`kwh_p90` summieren die Quantile je Zeitschritt, nehmen also voll korrelierte Fehler an (breites Band, passt zu „Bias ist der Hauptfeind“). Ob ein schmaleres Band aus den Backtest-Residuen besser kalibriert ist, prüft die Harness.
-- Metriken gibt es nur einmal: `windgap/core/metrics.py` (`evaluate`). Engine-Validierung und Harness rufen dieselbe Funktion.
+- `kwh_p10`/`kwh_p90` summieren die Quantile je Zeitschritt, nehmen also voll korrelierte Fehler an (breites Band, passt zu „Bias ist der Hauptfeind“). Ob das Band kalibriert ist, misst `energy_coverage_80` (Anteil der Szenarien, deren echte Energie in \[`kwh_p10`, `kwh_p90`\] liegt; Ziel ca. 0,8), wie scharf es ist, `energy_band_pct`. Beide rechnen über `energy_loss`, messen also immer das Band, das die GUI zeigt.
+- Metriken gibt es nur einmal: `windgap/core/metrics.py` (`evaluate` je Szenario, `summarize` über Szenarien). Engine-Validierung und Harness rufen dieselben Funktionen.
 
 ### S5 Engine-Kontrakt (T5)
 
@@ -174,7 +174,7 @@ interface AnalyzeRequest {
 
 interface AnalyzeResponse {
   prediction: { t0: number; stepS: 600; mean: number[]; q10: number[]; q90: number[] };
-  validation: Record<string, number>;              // wind_rmse, power_rmse, energy_dev_pct, coverage_80 ...
+  validation: Record<string, number>;              // Schlüssel wie in der Harness-Metriktabelle, dazu n_folds
   explanation: { summary: string; formula: string;
                  params: Record<string, number>; diagnostics: Record<string, number> };
   energy: { kwhP10: number; kwhP50: number; kwhP90: number; cumulativeKwh: number[] };
@@ -187,7 +187,7 @@ interface AnalyzeResponse {
 
 **Aus der Antwort abgeleitet, unabhängig von der Engine:** CSV-Export der Vorhersage und Berichtstext (Bonus 1) baut die GUI selbst.
 
-**Regeln an der Grenze:** JSON kennt kein NaN. Fehlende Messwerte sind `null`; eine nicht berechenbare Kennzahl fehlt in `validation`/`params`/`diagnostics`, statt NaN oder 0 zu sein. `validation` ist der Backtest von `windgap.backtest.backtest`: bis zu 5 simulierte Ausfälle in Länge des echten Ausfalls, rückwärts vom Trainingsende, Mittelwert je Metrik (`energy_dev_pct` als Betrag), dazu `n_folds`. `scatter.fitLine` ist die In-Sample-Vorhersage, gemittelt je 1-m/s-Klasse der Referenz; das funktioniert auch für Lag- und Tageszeitmodelle. Ausdünnung auf 2000 Punkte deterministisch über Index `floor(i · n / k)`.
+**Regeln an der Grenze:** JSON kennt kein NaN. Fehlende Messwerte sind `null`; eine nicht berechenbare Kennzahl fehlt in `validation`/`params`/`diagnostics`, statt NaN oder 0 zu sein. `validation` ist der Backtest von `windgap.backtest.backtest`: bis zu 5 simulierte Ausfälle in Länge des echten Ausfalls, rückwärts vom Trainingsende, zusammengefasst mit `metrics.summarize` (Mittelwert je Metrik, `energy_dev_pct` als Betrag), dazu `n_folds`. `scatter.fitLine` ist die In-Sample-Vorhersage, gemittelt je 1-m/s-Klasse der Referenz; das funktioniert auch für Lag- und Tageszeitmodelle. Ausdünnung auf 2000 Punkte deterministisch über Index `floor(i · n / k)`.
 
 **Dummy-Modell für den ersten Durchstich:** `identity` (Ziel = Referenz, σ konstant 1 m/s). Es existiert in beiden Engines und liefert eine vollständige `AnalyzeResponse`, damit jede Ansicht der GUI ab heute Abend mit echten Strukturen gefüllt ist.
 
@@ -245,8 +245,12 @@ uv run python -m harness --config configs/eval.yaml --models all
 | `power_rmse`, `power_mae` | kW, nach Anwendung der Leistungskurve |
 | `energy_dev_pct` | (Summe vorhergesagt − Summe echt) / Summe echt, je Szenario, dann Betrag gemittelt |
 | `bias` | mittlerer Windfehler, m/s |
-| `coverage_80` | Anteil echter Werte im 80-%-Band |
-| `score` | gewichtete Summe normierter Metriken, Gewichte in der Konfiguration |
+| `coverage_80` | Anteil echter Werte im 80-%-Band, je Zeitschritt |
+| `energy_coverage_80` | Anteil der Szenarien, deren echte Energie in \[`kwh_p10`, `kwh_p90`\] liegt (je Szenario 0 oder 1); Ziel ca. 0,8 |
+| `energy_band_pct` | (`kwh_p90` − `kwh_p10`) / echte Energie, Breite des Energiebands |
+| `score` | nur Harness: gewichtetes Mittel der Jury-Metriken im Verhältnis zur Baseline (siehe unten) |
+
+Prozentwerte fehlen in Szenarien ohne echte Energie (Flaute). Über Szenarien fasst `summarize` zusammen: Mittelwert je Metrik, `energy_dev_pct` als Mittel der Beträge.
 
 **Ausgabe:** `runs/<zeit>_<commit>/results.parquet` (ein Datensatz je Modell × Szenario), `leaderboard.csv`, und eine Zusammenfassung im Terminal. Ergebnisse lassen sich nach Ausfalllänge und Windklasse aufschlüsseln.
 

@@ -1,9 +1,8 @@
 """Simulated outages on data with known truth. The engine's validation and the harness scenarios both build on `fold`."""
 
-import numpy as np
 import pandas as pd
 
-from windgap.core.metrics import evaluate
+from windgap.core.metrics import evaluate, summarize
 from windgap.core.schema import STEP, PowerCurve
 from windgap.models import registry
 
@@ -22,7 +21,7 @@ def fold(model: str, params: dict, target: pd.Series, refs: pd.DataFrame, curve:
 
 def backtest(model: str, params: dict, target: pd.Series, refs: pd.DataFrame, curve: PowerCurve,
              length: int, n_folds: int = 5) -> dict[str, float]:
-    """Mean metrics over up to `n_folds` outages of `length` steps, tiled backwards from the end of `target`."""
+    """Summarized metrics over up to `n_folds` outages of `length` steps, tiled backwards from the end of `target`."""
     results = []
     for i in range(1, n_folds + 1):
         start_pos = len(target) - i * length
@@ -34,8 +33,4 @@ def backtest(model: str, params: dict, target: pd.Series, refs: pd.DataFrame, cu
             results.append(metrics)
     if not results:
         return {}
-    table = pd.DataFrame(results)
-    summary = table.mean().to_dict()
-    summary["energy_dev_pct"] = float(np.nanmean(table["energy_dev_pct"].abs()))
-    summary["n_folds"] = float(len(results))
-    return summary
+    return summarize(results) | {"n_folds": float(len(results))}

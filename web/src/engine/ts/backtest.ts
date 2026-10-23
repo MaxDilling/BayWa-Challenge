@@ -1,7 +1,7 @@
 // windgap/backtest.py
 import type { PowerCurve } from './energy'
 import { rows, type Frame } from './frame'
-import { evaluate } from './metrics'
+import { evaluate, summarize } from './metrics'
 import { create } from './models/registry'
 
 const MIN_TRAIN_STEPS = 144
@@ -15,7 +15,7 @@ export function fold(model: string, params: Params, target: Float64Array, refs: 
   return { pred, metrics: evaluate(target.slice(start, end), pred, curve) }
 }
 
-/** Mean metrics over up to `nFolds` outages of `length` steps, tiled backwards from the end of `target`. */
+/** Summarized metrics over up to `nFolds` outages of `length` steps, tiled backwards from the end of `target`. */
 export function backtest(model: string, params: Params, target: Float64Array, refs: Frame, curve: PowerCurve, length: number, nFolds = 5) {
   const results: Record<string, number>[] = []
   for (let i = 1; i <= nFolds; i++) {
@@ -25,11 +25,5 @@ export function backtest(model: string, params: Params, target: Float64Array, re
     if (Object.keys(metrics).length) results.push(metrics)
   }
   if (!results.length) return {}
-  const summary: Record<string, number> = {}
-  for (const key of Object.keys(results[0])) {
-    const values = results.map((r) => (key === 'energy_dev_pct' ? Math.abs(r[key]) : r[key])).filter((v) => !Number.isNaN(v))
-    summary[key] = values.length ? values.reduce((s, x) => s + x, 0) / values.length : NaN
-  }
-  summary.n_folds = results.length
-  return summary
+  return { ...summarize(results), n_folds: results.length }
 }

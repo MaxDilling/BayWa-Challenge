@@ -18,7 +18,7 @@ export const RootStore = types
     powerCurve: types.frozen<PowerCurve | undefined>(),
     nTurbines: 1,
     outage: types.frozen<Span | undefined>(),
-    model: 'identity',
+    model: 'linear_regression',
     response: types.frozen<AnalyzeResponse | undefined>(),
     status: types.optional(types.enumeration(['idle', 'running', 'error']), 'idle'),
     error: '',

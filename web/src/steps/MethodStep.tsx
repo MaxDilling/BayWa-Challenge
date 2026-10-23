@@ -13,9 +13,14 @@ import { store } from '@/state/store'
 
 /** Names and units for the keys of `params` and `diagnostics`; other keys are shown as they come. */
 const KEYS: Record<string, { label: string; unit?: string; digits: number }> = {
+  a: { label: 'Intercept a', unit: 'm/s', digits: 2 },
+  b: { label: 'Slope b', digits: 3 },
   r: { label: 'Correlation r', digits: 3 },
+  lag_min: { label: 'Delay τ', unit: 'min', digits: 0 },
   n_train: { label: 'Training pairs', unit: '× 10 min', digits: 0 },
-  sigma: { label: 'Spread σ', unit: 'm/s', digits: 2 },
+  sigma_0: { label: 'Spread σ in calm', unit: 'm/s', digits: 2 },
+  sigma_slope: { label: 'Spread σ growth per m/s of wind', digits: 3 },
+  error_memory_h: { label: 'Error memory', unit: 'h', digits: 1 },
 }
 
 export const MethodStep = observer(function MethodStep() {

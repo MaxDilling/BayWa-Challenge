@@ -35,7 +35,7 @@ class _Linear:
 
     def predict(self, refs: pd.DataFrame, extra: pd.DataFrame | None = None) -> pd.DataFrame:
         x = refs.iloc[:, 0].to_numpy(dtype=float)
-        # predict sees only the outage window: the first τ steps reuse the first reference value
+        # beyond the edges of `refs` the edge value stands in; callers pass context (backtest.predict_window)
         shifted = x[np.clip(np.arange(len(x)) - self.lag, 0, len(x) - 1)]
         mean = self.a + self.b * shifted
         return gaussian_prediction(mean, self.errors.sigma(mean), refs.index)
@@ -53,6 +53,8 @@ class _Linear:
 
 @register("linear_regression")
 class LinearRegression(_Linear):
+    label = "Linear regression (MCP)"
+    tagline = "Least-squares line through the reference wind, shifted by the delay between the farms."
     summary = ("The missing wind speed follows a straight line through the reference wind speed, fitted by least "
                "squares on the time both parks measured. The reference is shifted by the delay τ at which both parks "
                "agree best, because weather reaches them one after the other.")
@@ -65,6 +67,8 @@ class LinearRegression(_Linear):
 
 @register("variance_ratio")
 class VarianceRatio(_Linear):
+    label = "Variance ratio (MCP)"
+    tagline = "Line that keeps the target's mean and spread, shifted by the delay between the farms."
     summary = ("The missing wind speed follows a straight line through the reference wind speed that keeps the "
                "target's average and spread from the training period: b is the ratio of their standard deviations. "
                "The reference is shifted by the delay τ at which both parks agree best.")

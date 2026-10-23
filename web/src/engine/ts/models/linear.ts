@@ -37,7 +37,7 @@ abstract class Linear implements WindModel {
     return this
   }
 
-  /** predict sees only the outage window: the first τ steps reuse the first reference value. */
+  /** Beyond the edges of `refs` the edge value stands in; callers pass context (predictWindow). */
   predict(refs: Frame) {
     const [x] = refs.cols
     const n = x.length

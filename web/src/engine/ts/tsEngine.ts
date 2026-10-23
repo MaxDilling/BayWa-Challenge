@@ -1,10 +1,10 @@
 // windgap/engine.py, ported for the models in ./models/registry.ts.
 import type { AnalyzeRequest, AnalyzeResponse, Engine } from '../contract'
-import { backtest } from './backtest'
+import { backtest, predictWindow } from './backtest'
 import { energyLoss, expectedPower } from './energy'
 import { align, pairs, rows, STEP_MS, type Frame } from './frame'
 import type { WindModel } from './models/base'
-import { create, names } from './models/registry'
+import { create, info } from './models/registry'
 
 const MAX_SCATTER = 2000
 
@@ -15,7 +15,8 @@ export function analyze(req: AnalyzeRequest): AnalyzeResponse {
   const refs: Frame = { t0: all.t0, cols: all.cols.slice(1) }
   const { startMs, endMs } = req.outage
   const start = (startMs - all.t0) / STEP_MS
-  const refsOut = rows(refs, start, start + (endMs - startMs) / STEP_MS)
+  const end = start + (endMs - startMs) / STEP_MS
+  const refsOut = rows(refs, start, end)
   if (refsOut.cols.some((c) => c.some(Number.isNaN)))
     throw new Error('references must be complete during the outage; gap filling belongs to the import step')
 
@@ -24,7 +25,7 @@ export function analyze(req: AnalyzeRequest): AnalyzeResponse {
   const trainTarget = target.slice(0, train)
   const trainRefs = rows(refs, 0, train)
   const model = create(req.model, params).fit(trainTarget, trainRefs)
-  const pred = model.predict(refsOut)
+  const pred = predictWindow(model, refs, start, end)
   const energy = energyLoss(expectedPower(pred, req.powerCurve), model.errors.acf)
   const explanation = model.explain()
 
@@ -33,17 +34,20 @@ export function analyze(req: AnalyzeRequest): AnalyzeResponse {
     validation: finite(backtest(req.model, params, trainTarget, trainRefs, req.powerCurve, refsOut.cols[0].length)),
     explanation: { ...explanation, params: finite(explanation.params), diagnostics: finite(explanation.diagnostics) },
     energy,
-    scatter: scatter(trainTarget, trainRefs, model),
+    scatter: scatter(trainTarget, trainRefs, model, explanation.diagnostics.lag_min ?? 0),
     engine: { id: 'ts', version: __WINDGAP_VERSION__, ms: performance.now() - started },
   }
 }
 
-/** Training pairs against the first reference, evenly thinned; fit line = in-sample prediction per 1 m/s bin. */
-function scatter(target: Float64Array, refs: Frame, model: WindModel): AnalyzeResponse['scatter'] {
-  const [ref, tgt] = pairs(refs.cols[0], target)
+/** Training pairs as the model sees them: target(t) against the first reference at t − τ, evenly thinned; fit line =
+ * in-sample prediction per 1 m/s bin of that shifted reference. */
+function scatter(target: Float64Array, refs: Frame, model: WindModel, lagMin: number): AnalyzeResponse['scatter'] {
+  const lag = Math.round(lagMin / 10)
+  const shifted = refs.cols[0].map((_, i) => refs.cols[0][i - lag] ?? NaN)
+  const [ref, tgt] = pairs(shifted, target)
   const k = Math.min(ref.length, MAX_SCATTER)
   const shown = Array.from({ length: k }, (_, i) => Math.floor((i * ref.length) / k))
-  const [lineRef, linePred] = pairs(refs.cols[0], model.predict(refs).mean)
+  const [lineRef, linePred] = pairs(shifted, model.predict(refs).mean)
   const bins = new Map<number, [number, number, number]>()
   lineRef.forEach((r, i) => {
     const b = bins.get(Math.floor(r)) ?? [0, 0, 0]
@@ -65,6 +69,6 @@ const finite = (d: Record<string, number>) => Object.fromEntries(Object.entries(
 export const tsEngine: Engine = {
   id: 'ts',
   init: async (onProgress) => onProgress?.('TypeScript engine ready', 100),
-  listModels: async () => names().map((name) => ({ name })),
+  listModels: async () => info(),
   analyze: async (req) => analyze(req),
 }

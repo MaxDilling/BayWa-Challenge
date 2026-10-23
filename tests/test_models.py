@@ -3,6 +3,7 @@ import pandas as pd
 import pytest
 
 from harness.synthetic import synthetic_pair
+from windgap.backtest import predict_window
 from windgap.core.schema import Z90
 from windgap.models import registry
 from windgap.models.base import MAX_MEMORY_STEPS, PREDICTION_COLUMNS, calibrate
@@ -65,9 +66,19 @@ def test_linear_models_recover_line_and_delay(name):
     assert explanation.params == pytest.approx({"a": 2.0, "b": 0.5})
     assert explanation.diagnostics["lag_min"] == 20
     assert explanation.diagnostics["r"] == pytest.approx(1)
-    pred = model.predict(REF.iloc[100:110].to_frame())
-    assert pred["mean"].iloc[2:].to_numpy() == pytest.approx(target.iloc[102:110].to_numpy())
-    assert pred["mean"].iloc[0] == pytest.approx(2 + 0.5 * REF.iloc[100])  # before the window: first value
+    pred = predict_window(model, REF.to_frame(), INDEX[100], INDEX[110])
+    assert pred.index.equals(INDEX[100:110])
+    assert pred["mean"].to_numpy() == pytest.approx(target.iloc[100:110].to_numpy())
+
+
+def test_context_stops_at_a_reference_gap():
+    target = 2 + 0.5 * REF.shift(2)
+    model = registry.create("linear_regression").fit(target, REF.to_frame())
+    refs = REF.to_frame()
+    refs.iloc[98] = np.nan
+    pred = predict_window(model, refs, INDEX[100], INDEX[110])
+    assert pred["mean"].iloc[1:].to_numpy() == pytest.approx(target.iloc[101:110].to_numpy())
+    assert pred["mean"].iloc[0] == pytest.approx(2 + 0.5 * REF.iloc[99])  # nearest measured value
 
 
 def test_lag_search_respects_its_limit():

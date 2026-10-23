@@ -34,6 +34,10 @@ def test_golden_fixtures_are_current(model, case):
     assert_close(response, stored["response"])
 
 
+def test_model_list_is_current():
+    assert json.loads(list_models()) == json.loads(fixtures.MODELS.read_text())
+
+
 def test_prediction_spans_outage():
     request = fixtures.cases("identity")["basic"]
     response = json.loads(handle(json.dumps(request)))

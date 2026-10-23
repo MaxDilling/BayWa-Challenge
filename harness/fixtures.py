@@ -1,5 +1,5 @@
-"""Writes fixtures/golden/<model>/<case>.json: an AnalyzeRequest and windgap's response to it (minus `engine`).
-The ts engine must reproduce the response of every model it ports. Run: make fixtures"""
+"""Writes fixtures/golden/<model>/<case>.json: an AnalyzeRequest and windgap's response to it (minus `engine`), and
+fixtures/models.json: the ModelInfo list. The ts engine must reproduce both for every model it ports. Run: make fixtures"""
 
 import json
 import shutil
@@ -15,6 +15,7 @@ from windgap.engine import analyze
 from windgap.models import registry
 
 GOLDEN = Path(__file__).resolve().parent.parent / "fixtures" / "golden"
+MODELS = GOLDEN.parent / "models.json"
 
 
 def _request(target: pd.Series, refs: dict[str, pd.Series], start: pd.Timestamp, steps: int, model: str) -> dict:
@@ -56,6 +57,8 @@ def main() -> None:
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(json.dumps({"request": request, "response": response}, allow_nan=False))
             print(f"wrote {path.relative_to(GOLDEN.parent.parent)}")
+    MODELS.write_text(json.dumps(registry.info(), indent=2) + "\n")
+    print(f"wrote {MODELS.relative_to(GOLDEN.parent.parent)}")
 
 
 if __name__ == "__main__":

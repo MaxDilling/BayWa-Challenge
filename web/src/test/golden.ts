@@ -1,5 +1,5 @@
 import { readdirSync, readFileSync } from 'node:fs'
-import type { GoldenCase } from '@/engine/contract'
+import type { GoldenCase, ModelInfo } from '@/engine/contract'
 
 const root = new URL('../../../fixtures/golden/', import.meta.url)
 
@@ -9,6 +9,8 @@ export const goldenCases = readdirSync(root).flatMap((model) =>
     golden: JSON.parse(readFileSync(new URL(`${model}/${file}`, root), 'utf8')) as GoldenCase,
   })),
 )
+
+export const goldenModels = JSON.parse(readFileSync(new URL('../models.json', root), 'utf8')) as ModelInfo[]
 
 /** Deep equality with a relative tolerance on numbers; reports the path of the first mismatch. */
 export function expectClose(actual: unknown, expected: unknown, rel: number, path = 'response'): void {

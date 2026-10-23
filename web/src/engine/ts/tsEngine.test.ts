@@ -1,6 +1,6 @@
-import { describe, it } from 'vitest'
-import { expectClose, goldenCases } from '@/test/golden'
-import { names } from './models/registry'
+import { describe, expect, it } from 'vitest'
+import { expectClose, goldenCases, goldenModels } from '@/test/golden'
+import { info, names } from './models/registry'
 import { analyze } from './tsEngine'
 
 const ported = goldenCases.filter(({ golden }) => names().includes(golden.request.model))
@@ -11,3 +11,5 @@ describe.each(ported)('ts engine $name', ({ golden }) => {
     expectClose(response, golden.response, 1e-6)
   })
 })
+
+it('lists the models like windgap', () => expect(info()).toEqual(goldenModels))

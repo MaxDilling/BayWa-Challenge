@@ -111,6 +111,8 @@ Ausfallerkennung: zusammenhängende NaN-Blöcke im Ziel von mindestens 3 Zeitsch
 ```python
 class WindModel(Protocol):
     name: str                # eindeutig, z. B. "variance_ratio"
+    label: str               # für Menschen, z. B. "Variance ratio (MCP)"
+    tagline: str             # eine Zeile, was das Modell tut
     errors: Errors           # setzt fit: σ und Fehlergedächtnis, siehe unten
     def fit(self, target: pd.Series, refs: pd.DataFrame,
             extra: pd.DataFrame | None = None) -> "WindModel": ...
@@ -130,7 +132,9 @@ class Explanation:
 class VarianceRatio: ...
 ```
 
-Regeln: `fit` sieht nur Daten vor dem Ausfall (außer im Modus `train_on="both"`). `predict` darf nur `refs` und `extra` verwenden, nie das Ziel. Vorhersagen sind nach unten auf 0 begrenzt.
+Regeln: `fit` sieht nur Daten vor dem Ausfall (außer im Modus `train_on="both"`). `predict` darf nur `refs` und `extra` verwenden, nie das Ziel, und liefert eine Zeile je Zeile von `refs`. Vorhersagen sind nach unten auf 0 begrenzt.
+
+**Kontext um das Fenster (`windgap.backtest.predict_window`):** Engine und Backtest übergeben `predict` das Fenster samt bis zu `CONTEXT_STEPS` = 36 Schritten (6 h) lückenloser Referenz davor und danach und behalten nur die Zeilen des Fensters. So nutzt ein Modell mit Zeitversatz τ am Anfang des Ausfalls die gemessene Referenz vor dem Ausfall (bei τ < 0 am Ende die danach). Der Kontext endet an der ersten Referenzlücke oder am Rand der Daten; erst jenseits davon nimmt das Modell den Randwert.
 
 **Unsicherheit (`windgap.models.base.calibrate`, für jedes Modell dieselbe Routine):** Der Trainingszeitraum wird in 5 zusammenhängende Blöcke geteilt; jeder Block wird von einer Anpassung auf den anderen vier vorhergesagt (Leave-one-block-out). Aus diesen Fehlern auf ungesehenen Daten entsteht `Errors`:
 
@@ -171,7 +175,7 @@ interface Engine {
 
 type Grid = { t0: number; stepS: 600; values: (number | null)[] }; // t0 = UTC epoch ms
 
-interface ModelInfo { name: string }
+interface ModelInfo { name: string; label: string; tagline: string; recommended: boolean }
 
 interface AnalyzeRequest {
   target: Grid;
@@ -197,9 +201,9 @@ interface AnalyzeResponse {
 
 **Aus der Antwort abgeleitet, unabhängig von der Engine:** CSV-Export der Vorhersage und Berichtstext (Bonus 1) baut die GUI selbst.
 
-**Regeln an der Grenze:** JSON kennt kein NaN. Fehlende Messwerte sind `null`; eine nicht berechenbare Kennzahl fehlt in `validation`/`params`/`diagnostics`, statt NaN oder 0 zu sein. `validation` ist der Backtest von `windgap.backtest.backtest`: bis zu 5 simulierte Ausfälle in Länge des echten Ausfalls, rückwärts vom Trainingsende, zusammengefasst mit `metrics.summarize` (Mittelwert je Metrik, `energy_dev_pct` als Betrag, `energy_wape_pct`), dazu `n_folds`. `scatter.fitLine` ist die In-Sample-Vorhersage, gemittelt je 1-m/s-Klasse der Referenz; das funktioniert auch für Lag- und Tageszeitmodelle. Ausdünnung auf 2000 Punkte deterministisch über Index `floor(i · n / k)`.
+**Regeln an der Grenze:** JSON kennt kein NaN. Fehlende Messwerte sind `null`; eine nicht berechenbare Kennzahl fehlt in `validation`/`params`/`diagnostics`, statt NaN oder 0 zu sein. `validation` ist der Backtest von `windgap.backtest.backtest`: bis zu 5 simulierte Ausfälle in Länge des echten Ausfalls, rückwärts vom Trainingsende, zusammengefasst mit `metrics.summarize` (Mittelwert je Metrik, `energy_dev_pct` als Betrag, `energy_wape_pct`), dazu `n_folds`. `scatter` zeigt die Trainingspaare so, wie das Modell sie sieht: Ziel(t) gegen erste Referenz(t − τ) mit τ = `diagnostics.lag_min` (0 ohne Versatz). `scatter.fitLine` ist die In-Sample-Vorhersage, gemittelt je 1-m/s-Klasse dieser verschobenen Referenz; für LR und VR also genau die Gerade a + b · v (unten auf 0 begrenzt), für Tageszeitmodelle weiterhin sinnvoll. Ausdünnung auf 2000 Punkte deterministisch über Index `floor(i · n / k)`.
 
-**Modelle in beiden Engines:** `identity` (Ziel = Referenz, Baseline), `linear_regression` (Standard der GUI) und `variance_ratio`, alle mit kalibriertem σ (S3).
+**Modelle in beiden Engines:** `identity` (Ziel = Referenz, Baseline), `linear_regression` (Standard der GUI) und `variance_ratio`, alle mit kalibriertem σ (S3). `ModelInfo` kommt aus der Registry (`registry.info()`): `label` und `tagline` je Modellklasse, `recommended` für genau das Modell in `registry.RECOMMENDED` (bestes Harness-Ergebnis, Standard der GUI). `fixtures/models.json` hält die Liste fest; die `ts`-Engine muss sie gleich liefern.
 
 ## Modellarchitektur
 
@@ -228,7 +232,7 @@ Das holt die von LR weggenommene Streuung zurück und minimiert zugleich den Lei
 
 **Unsicherheit:** σ kommt aus Fehlern auf ungesehenen Trainingsdaten (Leave-one-block-out, S3), nicht aus der Trainingsanpassung, und wächst linear mit der vorhergesagten Windgeschwindigkeit. Ergebnis: `coverage_80` 0,78–0,83 je Datensatz (vorher mit σ = 1 m/s: 0,37–0,64). Ein konstantes σ (80-%-Quantil) gab ähnliche Abdeckung, aber schlechtere Leistungsfehler und ein zu schmales Energieband bei langen Ausfällen.
 
-**Umgesetzt (`windgap/models/linear.py`):** M1 `linear_regression` und M2 `variance_ratio` sind eine Klasse, die sich nur in (a, b) unterscheidet; M3 ist der Parameter `lag_max_min` (Standard 60): τ ∈ \[−60, 60\] min maximiert die Korrelation auf den Trainingsdaten. Weil `predict` nur das Ausfallfenster sieht, nutzen die ersten τ Schritte den ersten Referenzwert. Harness (Score, kleiner besser; identity = 1): LR 0,72, LR ohne Lag 0,75, VR 0,79. τ hilft auf Synthetik (+20 min), Demo und Hamburg, ±180 min bringt nichts zusätzlich. **LR schlägt VR auch bei der Energie** (`energy_wape_pct` 40 % gegen 50 %): E[P(v)] über die kalibrierte Verteilung holt die Streuung zurück, die LR im Mittelwert verliert (Hypothese oben bestätigt). LR ist deshalb Standard in der GUI.
+**Umgesetzt (`windgap/models/linear.py`):** M1 `linear_regression` und M2 `variance_ratio` sind eine Klasse, die sich nur in (a, b) unterscheidet; M3 ist der Parameter `lag_max_min` (Standard 60): τ ∈ \[−60, 60\] min maximiert die Korrelation auf den Trainingsdaten. Die ersten τ Schritte des Ausfalls nehmen die gemessene Referenz davor (Kontext, S3). Harness (Score, kleiner besser; identity = 1): LR 0,72, LR ohne Lag 0,75, VR 0,79. τ hilft auf Synthetik (+20 min), Demo und Hamburg, ±180 min bringt nichts zusätzlich. **LR schlägt VR auch bei der Energie** (`energy_wape_pct` 40 % gegen 50 %): E[P(v)] über die kalibrierte Verteilung holt die Streuung zurück, die LR im Mittelwert verliert (Hypothese oben bestätigt). LR ist deshalb Standard in der GUI.
 
 **Trainingsfenster:** Standard sind alle Daten vor dem Ausfall. Als Parameter testen: nur die letzten N Tage, oder exponentiell abklingende Gewichte, weil jüngere Wetterlagen ähnlicher sind.
 

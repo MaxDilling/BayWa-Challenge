@@ -11,6 +11,9 @@ from windgap.models.registry import register
 class Identity:
     """M0: lower bound and plumbing check. Uses the first reference only."""
 
+    label = "Reference as is (baseline)"
+    tagline = "Takes the reference wind unchanged; every other method must beat it."
+
     def fit(self, target: pd.Series, refs: pd.DataFrame, extra: pd.DataFrame | None = None) -> Self:
         x, y = refs.iloc[:, 0].to_numpy(dtype=float), target.to_numpy(dtype=float)
         self.r = correlation(x, y)

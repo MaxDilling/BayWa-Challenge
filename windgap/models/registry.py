@@ -8,6 +8,8 @@ import windgap.models
 from windgap.models.base import WindModel
 
 _MODELS: dict[str, type] = {}
+# The GUI's default: lowest harness score over all 7 datasets (SPEC.md, Modellarchitektur).
+RECOMMENDED = "linear_regression"
 
 
 def register(name: str):
@@ -29,6 +31,13 @@ def _discover() -> None:
 def names() -> list[str]:
     _discover()
     return sorted(_MODELS)
+
+
+def info() -> list[dict]:
+    """ModelInfo (S5) of every registered model."""
+    _discover()
+    return [{"name": n, "label": _MODELS[n].label, "tagline": _MODELS[n].tagline, "recommended": n == RECOMMENDED}
+            for n in sorted(_MODELS)]
 
 
 def create(name: str, **params) -> WindModel:

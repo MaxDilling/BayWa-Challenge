@@ -4,7 +4,7 @@ Kontrakt S3 und Modellleiter M0–M7 stehen in `SPEC.md`. Hier steht nur, was be
 
 ## Ein Modell hinzufügen
 
-1. Eine Datei `windgap/models/<name>.py` mit einer Klasse mit `@register("<name>")`. Die Registry findet sie automatisch, sodass sie in Harness, Engine und GUI auftaucht.
+1. Eine Datei `windgap/models/<name>.py` mit einer Klasse mit `@register("<name>")` und den Klassenattributen `label` (für Menschen, z. B. „Variance ratio (MCP)“) und `tagline` (eine Zeile). Die Registry findet sie automatisch, sodass sie in Harness, Engine und GUI auftaucht. Empfohlen ist genau `registry.RECOMMENDED`.
 2. Hyperparameter sind Konstruktor-Argumente mit Standardwert (`__init__(self, lag_max_min: int = 60)`). Die Engine reicht `params` aus der Anfrage als Keyword-Argumente durch. Varianten (LR mit und ohne Lag) sind Parameter, keine zweite Datei.
 3. `fit` setzt `self.errors = calibrate(x, y, fit_line)` aus `base.py`: `fit_line(x, y)` passt den Mittelwert an und gibt `v ↦ v̂` zurück; `calibrate` misst damit σ und das Fehlergedächtnis auf ungesehenen Blöcken (S3). Kein eigenes σ.
 4. `predict` gibt `gaussian_prediction(mean, self.errors.sigma(mean), refs.index)` zurück, außer das Modell hat eine eigene Verteilung. Spalten `mean, std, q10, q50, q90`, Index = `refs.index`, alles ≥ 0.
@@ -14,6 +14,7 @@ Kontrakt S3 und Modellleiter M0–M7 stehen in `SPEC.md`. Hier steht nur, was be
 ## Regeln
 
 - `fit(target, refs)` bekommt Ziel und Referenzen auf demselben Index, beide mit möglichen Lücken (NaN). Lücken selbst behandeln (`dropna` auf Paaren), nie interpolieren. In `predict` sind die Referenzen lückenlos.
+- `predict` liefert eine Zeile je Zeile von `refs`; Engine und Backtest übergeben über `predict_window` Kontext vor und nach dem Fenster (S3). Ein Zeitversatz liest diesen Kontext, statt den Randwert zu wiederholen.
 - `predict` darf nur `refs` und `extra` lesen. Alles, was das Modell aus den Daten lernt (Mittelwerte, Lag, σ), entsteht in `fit`.
 - σ kommt aus `calibrate` (Fehler auf ungesehenen Blöcken), nie aus der Anpassungsgüte. Ziel: `coverage_80` ≈ 0,8.
 - Schnell bleiben: `fit` läuft in der Harness tausendfach; numpy statt pandas in Schleifen (Harness < 30 s).

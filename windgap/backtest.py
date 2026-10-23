@@ -1,12 +1,30 @@
 """Simulated outages on data with known truth. The engine's validation and the harness scenarios both build on `fold`."""
 
+import numpy as np
 import pandas as pd
 
 from windgap.core.metrics import evaluate, summarize
 from windgap.core.schema import STEP, PowerCurve
 from windgap.models import registry
+from windgap.models.base import WindModel
 
 MIN_TRAIN_STEPS = 144  # one day
+CONTEXT_STEPS = 36  # 6 h of reference on either side of the window
+
+
+def predict_window(model: WindModel, refs: pd.DataFrame, start: pd.Timestamp, end: pd.Timestamp) -> pd.DataFrame:
+    """Prediction for [start, end), made from the window plus the complete reference rows right before and after it
+    (up to CONTEXT_STEPS each), so a model that shifts the reference by τ uses measured values, not the window's edge."""
+    i, j = refs.index.searchsorted([start, end])
+    complete = refs.notna().all(axis=1).to_numpy()
+    before = _leading(complete[max(0, i - CONTEXT_STEPS):i][::-1])
+    after = _leading(complete[j:j + CONTEXT_STEPS])
+    return model.predict(refs.iloc[i - before:j + after]).iloc[before:before + j - i]
+
+
+def _leading(mask: np.ndarray) -> int:
+    """Number of leading True values."""
+    return len(mask) if mask.all() else int(np.argmin(mask))
 
 
 def fold(model: str, params: dict, target: pd.Series, refs: pd.DataFrame, curve: PowerCurve,
@@ -15,7 +33,7 @@ def fold(model: str, params: dict, target: pd.Series, refs: pd.DataFrame, curve:
     before = target.index < start
     window = (target.index >= start) & (target.index < end)
     fitted = registry.create(model, **params).fit(target[before], refs[before])
-    pred = fitted.predict(refs[window])
+    pred = predict_window(fitted, refs, start, end)
     return pred, evaluate(target[window], pred, curve, fitted.errors.acf)
 
 

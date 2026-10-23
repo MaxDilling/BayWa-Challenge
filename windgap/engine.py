@@ -9,7 +9,7 @@ import numpy as np
 import pandas as pd
 
 import windgap
-from windgap.backtest import backtest
+from windgap.backtest import backtest, predict_window
 from windgap.core.energy import energy_loss, expected_power
 from windgap.core.grid import align, from_ms, grid_to_series, to_ms
 from windgap.core.schema import STEP, STEP_S, Outage, PowerCurve
@@ -23,7 +23,7 @@ def handle(request_json: str) -> str:
 
 
 def list_models() -> str:
-    return json.dumps([{"name": name} for name in registry.names()])
+    return json.dumps(registry.info())
 
 
 def analyze(req: dict) -> dict:
@@ -45,7 +45,7 @@ def analyze(req: dict) -> dict:
     name, params = req["model"], req.get("params") or {}
     train = df.index < outage.start
     model = registry.create(name, **params).fit(target[train], refs[train])
-    pred = model.predict(refs_out)
+    pred = predict_window(model, refs, outage.start, outage.end)
     energy = energy_loss(expected_power(pred, curve), outage, model.errors.acf)
     explanation = model.explain()
 
@@ -70,15 +70,16 @@ def analyze(req: dict) -> dict:
             "kwhP90": energy.kwh_p90,
             "cumulativeKwh": _floats(energy.cumulative),
         },
-        "scatter": _scatter(target[train], refs[train], model),
+        "scatter": _scatter(target[train], refs[train], model, explanation.diagnostics.get("lag_min", 0)),
         "engine": {"id": "py", "version": windgap.__version__, "ms": (time.perf_counter() - started) * 1000},
     }
 
 
-def _scatter(target: pd.Series, refs: pd.DataFrame, model) -> dict:
-    """Training pairs against the first reference, evenly thinned to MAX_SCATTER. The fit line is the in-sample
-    prediction averaged per 1 m/s reference bin, so it works for lagged and time-dependent models too."""
-    ref = refs.iloc[:, 0]
+def _scatter(target: pd.Series, refs: pd.DataFrame, model, lag_min: float) -> dict:
+    """Training pairs as the model sees them: target(t) against the first reference at t − τ (τ = lag_min), evenly
+    thinned to MAX_SCATTER. The fit line is the in-sample prediction averaged per 1 m/s bin of that shifted reference:
+    exactly the model's line for a + b · v_r(t − τ), and still meaningful for models that depend on more."""
+    ref = refs.iloc[:, 0].shift(round(lag_min * 60 / STEP_S))
     pairs = pd.DataFrame({"ref": ref, "target": target}).dropna()
     k = min(len(pairs), MAX_SCATTER)
     shown = pairs.iloc[(np.arange(k) * len(pairs)) // k] if k else pairs

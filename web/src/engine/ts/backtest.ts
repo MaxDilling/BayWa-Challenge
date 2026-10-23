@@ -2,16 +2,29 @@
 import type { PowerCurve } from './energy'
 import { rows, type Frame } from './frame'
 import { evaluate, summarize } from './metrics'
+import type { Prediction, WindModel } from './models/base'
 import { create } from './models/registry'
 
 const MIN_TRAIN_STEPS = 144
+const CONTEXT_STEPS = 36
+
+/** Prediction for rows [start, end) from the window plus up to CONTEXT_STEPS complete reference rows on either side. */
+export function predictWindow(model: WindModel, refs: Frame, start: number, end: number) {
+  const complete = (i: number) => i >= 0 && i < refs.cols[0].length && refs.cols.every((c) => !Number.isNaN(c[i]))
+  let before = 0
+  while (before < CONTEXT_STEPS && complete(start - before - 1)) before++
+  let after = 0
+  while (after < CONTEXT_STEPS && complete(end + after)) after++
+  const pred = model.predict(rows(refs, start - before, end + after))
+  return Object.fromEntries(Object.entries(pred).map(([k, v]) => [k, v.slice(before, before + end - start)])) as Prediction
+}
 
 type Params = Record<string, number | string>
 
 /** Fit on everything before row `start`, predict rows [start, end), score against the hidden target. */
 export function fold(model: string, params: Params, target: Float64Array, refs: Frame, curve: PowerCurve, start: number, end: number) {
   const fitted = create(model, params).fit(target.slice(0, start), rows(refs, 0, start))
-  const pred = fitted.predict(rows(refs, start, end))
+  const pred = predictWindow(fitted, refs, start, end)
   return { pred, metrics: evaluate(target.slice(start, end), pred, curve, fitted.errors.acf) }
 }
 

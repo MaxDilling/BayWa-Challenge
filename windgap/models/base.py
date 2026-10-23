@@ -45,6 +45,8 @@ class WindModel(Protocol):
     fit sets `errors`, whose autocorrelation the energy band (S4) needs."""
 
     name: str
+    label: str  # for people, e.g. "Linear regression (MCP)"
+    tagline: str  # one line on what it does
     errors: Errors
 
     def fit(self, target: pd.Series, refs: pd.DataFrame, extra: pd.DataFrame | None = None) -> Self: ...

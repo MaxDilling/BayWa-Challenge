@@ -1,0 +1,20 @@
+[
+  {
+    "name": "identity",
+    "label": "Reference as is (baseline)",
+    "tagline": "Takes the reference wind unchanged; every other method must beat it.",
+    "recommended": false
+  },
+  {
+    "name": "linear_regression",
+    "label": "Linear regression (MCP)",
+    "tagline": "Least-squares line through the reference wind, shifted by the delay between the farms.",
+    "recommended": true
+  },
+  {
+    "name": "variance_ratio",
+    "label": "Variance ratio (MCP)",
+    "tagline": "Line that keeps the target's mean and spread, shifted by the delay between the farms.",
+    "recommended": false
+  }
+]

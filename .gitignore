@@ -6,6 +6,7 @@ dist/
 runs/
 screenshots/
 data/challenge/
+data/dwd/
 node_modules/
 web/dist/
 web/public/pyodide/

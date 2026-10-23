@@ -63,7 +63,7 @@ def leaderboard(results: pd.DataFrame, weights: dict[str, float], baseline: str)
     per_dataset = keyed.reset_index().reindex(columns=["model", "dataset", "length_h", *COLUMNS])
     groups = per_dataset.groupby(["model", "length_h"], sort=False)
     overall = groups[COLUMNS].mean().reset_index().assign(dataset="all", n=groups["n"].sum().to_numpy())
-    board = pd.concat([per_dataset, overall])[["model", "dataset", "length_h", *COLUMNS]]
+    board = pd.concat([per_dataset, overall])[["model", "dataset", "length_h", *COLUMNS]].astype({"n": int})
     return board.sort_values(["dataset", "length_h", "score"], key=_length_order, ignore_index=True)
 
 

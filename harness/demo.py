@@ -7,6 +7,7 @@ import numpy as np
 import pandas as pd
 
 from harness.synthetic import generic_power_curve, synthetic_pair
+from windgap.core.schema import PowerCurve
 
 OUT = Path(__file__).resolve().parent.parent / "data" / "synthetic"
 OUTAGE = (pd.Timestamp("2026-10-27 08:00", tz="Europe/Berlin"), pd.Timedelta("30h"))
@@ -18,6 +19,10 @@ def write_wind(series: pd.Series, path: Path) -> None:
     path.write_text("Timestamp,Wind speed (m/s)\n" + "".join(f"{t},{v}\n" for t, v in zip(local, values)))
 
 
+def write_power_curve(curve: PowerCurve, path: Path) -> None:
+    path.write_text("wind_speed_ms,power_kw\n" + "".join(f"{v:g},{p:.1f}\n" for v, p in zip(curve.wind_ms, curve.power_kw)))
+
+
 def main() -> None:
     OUT.mkdir(parents=True, exist_ok=True)
     pair = synthetic_pair(days=31, seed=7, start="2026-09-30 22:00")
@@ -26,10 +31,7 @@ def main() -> None:
     target[(target.index >= start) & (target.index < start + length)] = np.nan
     write_wind(target, OUT / "demo_target.csv")
     write_wind(pair["ref"], OUT / "demo_reference.csv")
-    curve = generic_power_curve()
-    (OUT / "demo_power_curve.csv").write_text(
-        "wind_speed_ms,power_kw\n" + "".join(f"{v:g},{p:.1f}\n" for v, p in zip(curve.wind_ms, curve.power_kw))
-    )
+    write_power_curve(generic_power_curve(), OUT / "demo_power_curve.csv")
     print(f"wrote demo files to {OUT}")
 
 

@@ -18,6 +18,7 @@ make test        # pytest + vitest (inkl. windgap in Pyodide gegen die Golden-Fi
 make fixtures    # Golden-Fixtures neu schreiben (nach jeder Änderung an Modell, Energie, Metrik, engine.py)
 make demo        # data/synthetic/demo_*.csv neu schreiben (Demo-Daten der GUI)
 make harness     # Leaderboard aller Modelle über alle Datensätze aus configs/eval.yaml → runs/
+make dwd         # data/dwd/<paar>/ von opendata.dwd.de laden (echte Stationspaare, nicht eingecheckt)
 make dev         # Wheel bauen, Pyodide holen, Vite-Dev-Server
 make build       # dist/windgap.html (Einzeldatei, ts) + dist/windgap-web/ (beide Engines)
 make serve       # build + dist/windgap-web/ auf http://localhost:8000
@@ -63,7 +64,7 @@ harness (nativ) ──▶ windgap.backtest.fold ──▶ windgap.models.registr
 - **`windgap/models/`**: `base.py` (`WindModel`-Protocol, `Explanation`, `gaussian_prediction`), `registry.py` (`@register`; findet jedes Modul im Ordner automatisch), ein Modul je Modell. Regeln: `windgap/models/CLAUDE.md`.
 - **`windgap/backtest.py`**: `fold` (ein simulierter Ausfall) und `backtest` (die Validierungsmetriken der Engine). Die Harness-Szenarien bauen auf `fold` auf.
 - **`windgap/engine.py`**: `handle(json) -> json` und `list_models()`, Kontrakt S5. Erwartet vollständige Referenzen im Ausfall, weil Lücken beim Import gefüllt werden (ADR-5).
-- **`harness/`**: nur nativ, nicht im Wheel. `__main__.py` (CLI, Ausgabe nach `runs/`), `run.py` (rollierende Szenarien über `fold`, Leaderboard und Score), `datasets.py` (Datensätze aus `configs/eval.yaml`: Synthetik oder Ordner mit Challenge-CSVs über `windgap.core.io`), `synthetic.py` (Paare mit bekannter Wahrheit, generische Leistungskurve), `fixtures.py` (schreibt die Golden-Fixtures), `demo.py` (schreibt die Demo-CSVs im Challenge-Format). Regeln: `harness/CLAUDE.md`.
+- **`harness/`**: nur nativ, nicht im Wheel. `__main__.py` (CLI, Ausgabe nach `runs/`), `run.py` (rollierende Szenarien über `fold`, Leaderboard und Score), `datasets.py` (Datensätze aus `configs/eval.yaml`: Synthetik oder Ordner mit Challenge-CSVs über `windgap.core.io`), `synthetic.py` (Paare mit bekannter Wahrheit, generische Leistungskurve), `fixtures.py` (schreibt die Golden-Fixtures), `demo.py` (schreibt die Demo-CSVs im Challenge-Format), `dwd.py` (lädt fünf DWD-Stationspaare nach `data/dwd/`). Regeln: `harness/CLAUDE.md`.
 - **`web/`**: Vite, React, TypeScript, shadcn/ui, Tailwind, ECharts, MobX State Tree. Regeln: `web/CLAUDE.md`.
   - `src/engine/contract.ts`: S5 auf TS-Seite. `src/engine/index.ts`: `createEngine(id?, onProgress?)` → `{ engine, fallback? }`, Auswahl über `?engine=`, `py` wird einmal geladen und gecacht, scheitert es, übernimmt `ts` und `fallback` nennt den Grund.
   - `src/engine/py/`: `worker.ts` lädt Pyodide aus `public/pyodide/`, numpy und pandas, entpackt `public/py/windgap.whl` und ruft `handle`/`list_models`; `pyEngine.ts` ist der Promise-Wrapper um den Worker.
@@ -73,7 +74,7 @@ harness (nativ) ──▶ windgap.backtest.fold ──▶ windgap.models.registr
   - `scripts/fetch-pyodide.mjs`: kopiert Pyodide aus `node_modules` und lädt die Wheels von numpy und pandas samt Abhängigkeiten (sha256 gegen die Lock-Datei) nach `public/pyodide/`. `PACKAGES` dort = Abhängigkeiten von `windgap`.
 - **`.github/workflows/pages.yml`**: bei Push auf `main` `make install test build`, dann `dist/windgap-web/` auf GitHub Pages.
 - **`fixtures/`**: eingecheckt. `golden/` von Python erzeugt; `csv/` sind Import-Fälle für beide Importe (vitest und `tests/test_io.py`): `<fall>.expected.json` ist eine Liste von Reihen `{id, grid, report}`, bei `curve_*` eine Leistungskurve `{windMs, powerKw}`, oder `{error}` mit einem Teil der Meldung. Erwartungen sind unabhängig mit pandas (`read_csv`, `tz_localize(..., ambiguous="infer")`) berechnet, nie mit dem Import selbst.
-- **`data/challenge/`** ist nicht eingecheckt, solange nicht geklärt ist, ob die Challenge-Daten öffentlich sein dürfen.
+- **`data/challenge/`** ist nicht eingecheckt, solange nicht geklärt ist, ob die Challenge-Daten öffentlich sein dürfen. `data/dwd/` ist nicht eingecheckt; `make dwd` lädt es reproduzierbar.
 
 ## Arbeiten im Team
 

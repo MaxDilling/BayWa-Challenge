@@ -267,7 +267,7 @@ Prozentwerte fehlen in Szenarien ohne echte Energie (Flaute). Über Szenarien fa
 
 **Diagnose-Notebook `notebooks/diagnose.ipynb`** für menschliches Debugging: Überlagerung echt/vorhergesagt für ein wählbares Szenario; Streudiagramm Ziel gegen Referenz mit Modellgeraden; Residuen gegen Referenzwind, gegen Uhrzeit und gegen Ausfalllänge; Fehlerbeitrag zur Energie je Windklasse. Diese Ansichten zeigen, warum ein Modell an einem Tag versagt, und sind wichtiger als eine Karte.
 
-**Testdaten für heute Abend:** ein Generator für synthetische Paare (Weibull-verteilter Wind, Korrelation ca. 0,85, Lag 20 min, Tagesgang, Rauschen) mit bekannter Wahrheit, plus 2–3 echte Stationspaare vom DWD (siehe Externe Daten). Damit läuft die ganze Kette, bevor die echten Daten da sind.
+**Testdaten für heute Abend:** ein Generator für synthetische Paare (Weibull-verteilter Wind, Korrelation ca. 0,85, Lag 20 min, Tagesgang, Rauschen) mit bekannter Wahrheit, plus fünf echte Stationspaare vom DWD (siehe Externe Daten). Damit läuft die ganze Kette, bevor die echten Daten da sind.
 
 ## GUI-Anforderungen
 
@@ -306,6 +306,18 @@ Empfehlung: externe Daten heute als realistische Testpaare für die Harness nutz
 2. **Vorwissen (mittel):** typische Lags, Tagesgang, ob VR oder LR besser abschneidet. Liefert gute Startwerte und Argumente für die Präsentation.
 3. **Zusatzregressoren (Bonus 2):** Temperatur und Druck aus ERA5 am Standort, als Proxy für Stabilität. Nur wenn morgen Koordinaten vorliegen, und nur wenn die Harness einen Gewinn zeigt.
 4. **Vortraining eines Modells (niedrig):** nicht empfohlen.
+
+**Umgesetzt (`make dwd`, `harness/dwd.py`):** fünf Paare aus `recent/` (FF_10, 10-Minuten-Mittel in UTC, ca. 10 m Höhe), 15.09.–15.10.2026 (30 Tage wie die Challenge), im Challenge-Format nach `data/dwd/<paar>/` mit der generischen Leistungskurve. Nur stdlib und pandas, keine erfundenen Werte; Lücken bleiben NaN.
+
+| Paar (Ziel ← Referenz) | Abstand | r | Mittel Ziel / Referenz |
+| --- | --- | --- | --- |
+| Bremen ← Brake | 40 km | 0,79 | 3,5 / 3,3 m/s |
+| Hamburg-Fuhlsbüttel ← Ruthenstrom | 39 km | 0,85 | 3,5 / 4,3 m/s |
+| Büsum ← Sankt Peter-Ording | 29 km | 0,83 | 7,7 / 6,2 m/s |
+| Schleswig ← Flensburg | 30 km | 0,81 | 2,8 / 3,6 m/s |
+| Dörpen ← Friesoythe | 41 km | 0,83 | 2,4 / 3,1 m/s |
+
+Vorbehalt: In 10 m Höhe liegt der Wind meist unter der Einschaltgeschwindigkeit der Nabenhöhen-Kurve (3 m/s). Energiemetriken der Binnenpaare beruhen deshalb auf wenigen windigen Stunden und sind relativ groß; Büsum ist das Paar, das Nabenhöhenwind am nächsten kommt. Die Mittelwerte unterscheiden sich je Paar um bis zu 25 %, ein Test dafür, ob Modelle den Versatz lernen.
 
 **\[offen\]** Sind externe Daten laut Regeln erlaubt? Liegen Koordinaten, Nabenhöhen oder Turbinentypen vor?
 
@@ -346,13 +358,13 @@ windgap/                    Python-Kern, Pyodide-kompatibel, einziger Inhalt des
   models/    CLAUDE.md  base.py  registry.py  identity.py  (linear.py  variance_ratio.py ...)
   backtest.py               fold() + backtest(), gemeinsam für Engine-Validierung und Harness
   engine.py                 handle(request_json) -> response_json, list_models()
-harness/                    nur nativ: CLAUDE.md  __main__.py (CLI)  run.py (Szenarien, Leaderboard)  datasets.py  synthetic.py  fixtures.py  demo.py  (dwd.py  benchmarks/)
+harness/                    nur nativ: CLAUDE.md  __main__.py (CLI)  run.py (Szenarien, Leaderboard)  datasets.py  synthetic.py  fixtures.py  demo.py  dwd.py  (benchmarks/)
 tests/                      pytest
 fixtures/
   golden/<modell>/<fall>.json   AnalyzeRequest + Antwort von windgap, Spezifikation der ts-Engine
   csv/                          Parser-Fälle für TS- und Python-Import, je mit *.expected.json
 configs/     eval.yaml
-data/        synthetic/  dwd/  challenge/ (nicht eingecheckt, bis geklärt ist, ob öffentlich erlaubt)
+data/        synthetic/  dwd/ (`make dwd`, nicht eingecheckt)  challenge/ (nicht eingecheckt, bis geklärt ist, ob öffentlich erlaubt)
 notebooks/   diagnose.ipynb
 runs/        Harness-Ergebnisse, nicht eingecheckt
 web/                        Vite + React + shadcn (Nova/Radix) + Tailwind v4 + ECharts + MST, CLAUDE.md
@@ -385,7 +397,7 @@ In Klammern: geplant, noch nicht angelegt. Leere Platzhalterdateien gibt es nich
 - [x] Synthetik-Generator (`harness/synthetic.py`), Metriken (`windgap/core/metrics.py`), Backtest-Fold (`windgap/backtest.py`)
 - [x] Szenarien, `configs/eval.yaml`, Leaderboard-CLI (`make harness`), Kalibrierung des Energiebands (`energy_coverage_80`) und energiegewichtete Energieabweichung (`energy_wape_pct`)
 - [x] Leistungskurve und Erwartungswert der Leistung (S4), erste Version
-- [ ] Mathe B: 3–5 DWD-Stationspaare laden
+- [x] Fünf DWD-Stationspaare (`make dwd`)
 - [ ] Alle: Testplan aus „Auslieferung“ auf allen drei Laptops
 
 ### Erste Stunde morgen

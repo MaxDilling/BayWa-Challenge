@@ -1,4 +1,4 @@
-.PHONY: install dev test fixtures demo harness wheel pyodide build serve screenshots
+.PHONY: install dev test fixtures demo harness dwd wheel pyodide build serve screenshots
 
 install:
 	uv sync
@@ -23,6 +23,10 @@ demo:
 # Leaderboard over all models and datasets in configs/eval.yaml, written to runs/<time>_<commit>/
 harness:
 	uv run python -m harness --config configs/eval.yaml --models all
+
+# data/dwd/<pair>/: five real DWD station pairs, downloaded from opendata.dwd.de (not checked in)
+dwd:
+	uv run python -m harness.dwd
 
 wheel:
 	rm -rf web/public/py

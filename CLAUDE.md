@@ -19,10 +19,12 @@ make fixtures    # Golden-Fixtures neu schreiben (nach jeder Änderung an Modell
 make demo        # data/synthetic/demo_*.csv neu schreiben (Demo-Daten der GUI)
 make harness     # Leaderboard aller Modelle über alle Datensätze aus configs/eval.yaml → runs/
 make dwd         # data/dwd/<paar>/ von opendata.dwd.de laden (echte Stationspaare, nicht eingecheckt)
+make predict TURBINES=4   # Abgabe-CSV aus data/challenge/ (target.csv, reference.csv, power_curve.csv) → predictions.csv
 make dev         # Wheel bauen, Pyodide holen, Vite-Dev-Server
 make build       # dist/windgap.html (Einzeldatei, ts) + dist/windgap-web/ (beide Engines)
 make serve       # build + dist/windgap-web/ auf http://localhost:8000
-make screenshots # build + screenshots/: alle Schritte (Desktop, Handy, dunkel), Upload-Fehler, py-Engine
+make screenshots # build + screenshots/: alle Schritte (Desktop, Handy, dunkel), Upload-Fehler, Warnungen, How it works, py-Engine
+make robustness  # build + realistische Uploads auf beiden Engines mit Zeiten (braucht make dwd)
 uv run pytest tests/test_models.py -k identity   # einzelner Test
 ```
 
@@ -70,9 +72,9 @@ harness (nativ) ──▶ windgap.backtest.fold ──▶ windgap.models.registr
   - `src/engine/py/`: `worker.ts` lädt Pyodide aus `public/pyodide/`, numpy und pandas, entpackt `public/py/windgap.whl` und ruft `handle`/`list_models`; `pyEngine.ts` ist der Promise-Wrapper um den Worker.
   - `src/engine/ts/`: Port von `windgap`, eine Datei je Python-Modul (`frame.ts` ↔ grid/schema, `energy.ts`, `metrics.ts`, `backtest.ts`, `models/` mit `base.ts` (`calibrate`), `identity.ts`, `linear.ts`, `tsEngine.ts` ↔ engine.py). Modelle nur, wenn sie in `models/registry.ts` eingetragen sind; jedes braucht Golden-Fixtures.
   - `src/data/`: CSV-Import (T1, TS) nach S1, Zwilling von `windgap/core/io.py`: `csv.ts` (Tabelle mit Vorspann und Kopf, Zahlen, Datumsformate, Tag/Monat-Reihenfolge je Datei, Fehlwert-Tokens), `berlin.ts` (EU-Sommerzeitregel; doppelte Stunde nach Reihenfolge), `wind.ts` (`parseWindCsv` → eine `WindSeries` je Windspalte), `powerCurve.ts` (`turbineCount`: Anzahl aus Dateiname oder Kopf), `assign.ts` (`assignFiles(files)` → `{ series, targetCandidates, target?, powerCurve?, turbines?, errors }` für mehrere auf einmal abgelegte Dateien), `outage.ts` (Ausfälle ≥ 3 Schritte, sonst Messlücken; vor dem ersten Zielwert zuletzt), `filled.ts` (`filledTargetCsv`: Abgabeformat), `dataset.ts` (`buildDataset`, `toRequest` mit Überbrückung kurzer Referenzlücken im Ausfall), `checks.ts` (`plausibility`: Datenwarnungen), `demo.ts` (lädt `data/synthetic/demo_*.csv` über denselben Weg). Fehler sind `ImportError` mit Zeilennummer.
-  - `scripts/screenshots.mjs`: Playwright klickt die Demo durch alle Schritte (auch per Ablagezone mit Turbinen-Entscheidung und mit Daten, die Warnungen auslösen) und legt Bilder in `screenshots/` (nicht eingecheckt); Konsolenfehler lassen es scheitern.
   - `src/state/store.ts`: MST-Store; rechnet erst nach bestätigter Turbinenzahl (`turbinesConfirmed`), dann bei neuen Daten, Ausfall oder Engine alle Modelle (gewähltes zuerst) für die Vergleichstabelle, ein Modellwechsel schaltet nur die Ansicht.
-  - `src/components/metrics.ts`: Namen, Erklärungen und Sätze zu `validation` und Energie (Results, Method, Export).
+  - `src/components/`: `format.ts` (Zeit in Europe/Berlin, Zahlen; `fmtAmount` für jede kWh- und kW-Zahl), `metrics.ts` (Namen, Erklärungen und Sätze zu `validation` und Energie für Results, Method, Export), `Warnings.tsx` (Warnungen und das Banner oben in Results), `HowItWorks.tsx` (Sheet im Kopf: Methode in drei Schritten und `BENCHMARK`, das Harness-Ergebnis hinter der Empfehlung), `charts/` (ECharts-Wrapper), `ui/` (shadcn).
+  - `scripts/screenshots.mjs`: Playwright klickt die Demo durch alle Schritte (auch per Ablagezone mit Turbinen-Entscheidung und mit Daten, die Warnungen auslösen) und legt Bilder in `screenshots/` (nicht eingecheckt); Konsolenfehler lassen es scheitern.
   - `scripts/robustness.mjs` (`make robustness`): realistische Uploads über die Ablagezone auf beiden Engines (DWD-Paar mit 24 h Lücke, deutsches Format, Park als eine Datei mit mehreren Turbinen, ein Jahr 10-Minuten-Daten), misst Import, Ergebnis und Methodenvergleich; Konsolenfehler, NaN oder Analysefehler lassen es scheitern.
   - `scripts/fetch-pyodide.mjs`: kopiert Pyodide aus `node_modules` und lädt die Wheels von numpy und pandas samt Abhängigkeiten (sha256 gegen die Lock-Datei) nach `public/pyodide/`. `PACKAGES` dort = Abhängigkeiten von `windgap`.
 - **`.github/workflows/pages.yml`**: bei Push auf `main` `make install test build`, dann `dist/windgap-web/` auf GitHub Pages.

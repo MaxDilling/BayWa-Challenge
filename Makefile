@@ -15,7 +15,6 @@ test: wheel pyodide
 fixtures:
 	uv run python -m harness.fixtures
 
-# Stable file name: the py worker loads py/windgap.whl.
 # data/synthetic/demo_*.csv behind "Load demo data"
 demo:
 	uv run python -m harness.demo
@@ -25,20 +24,21 @@ harness:
 	uv run python -m harness --config configs/eval.yaml --models all
 
 # Submission without the GUI: every outage of the target filled, challenge format plus a Predicted column.
+# MODEL defaults to the recommended model (windgap.models.registry.RECOMMENDED).
 # make predict TURBINES=4 [TARGET=... REFERENCES="a.csv b.csv" POWER_CURVE=... MODEL=... OUT=...]
 TARGET ?= data/challenge/target.csv
 REFERENCES ?= data/challenge/reference.csv
 POWER_CURVE ?= data/challenge/power_curve.csv
-MODEL ?= linear_regression
 OUT ?= predictions.csv
 predict:
 	uv run python -m harness.predict --target $(TARGET) $(addprefix --reference ,$(REFERENCES)) --power-curve $(POWER_CURVE) \
-		$(if $(TURBINES),--n-turbines $(TURBINES)) --model $(MODEL) --out $(OUT)
+		$(if $(TURBINES),--n-turbines $(TURBINES)) $(if $(MODEL),--model $(MODEL)) --out $(OUT)
 
 # data/dwd/<pair>/: five real DWD station pairs, downloaded from opendata.dwd.de (not checked in)
 dwd:
 	uv run python -m harness.dwd
 
+# Stable file name: the py worker loads py/windgap.whl.
 wheel:
 	rm -rf web/public/py
 	uv build --wheel --out-dir web/public/py

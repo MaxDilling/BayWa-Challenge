@@ -4,7 +4,7 @@ with the predicted mean in the outages (windgap.core.io.filled_target_csv, the s
 An outage the engine refuses (e.g. no target data before it) stays NaN, is reported, and the exit status is 1.
 
 uv run python -m harness.predict --target t.csv --reference r.csv [--reference r2.csv ...] --power-curve c.csv \
-    --n-turbines 4 [--model linear_regression] [--out predictions.csv]"""
+    --n-turbines 4 [--model NAME] [--out predictions.csv]"""
 
 import argparse
 import json

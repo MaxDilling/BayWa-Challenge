@@ -7,7 +7,7 @@ Oct 23, 2026 · @Max Dillinger
 Dieses Dokument ist die einzige Quelle der Wahrheit für Menschen und KI-Agenten. Jeder Agent bekommt den Abschnitt „Leitprinzipien“, „Architekturentscheidungen“, „Schnittstellen“ und den Abschnitt seines Teilprodukts als Kontext.
 
 - Änderungen an Schnittstellen nur nach Absprache im Team, dann zuerst hier, dann im Code.
-- Mit **\[offen\]** markierte Punkte werden morgen früh mit den Organisatoren geklärt.
+- Mit **\[offen\]** markierte Punkte klären wir am Morgen des 24.10. mit den Organisatoren.
 
 ## Ziele und Leitprinzipien
 
@@ -18,7 +18,7 @@ Ziel ist, in allen vier Kriterien vorne zu liegen: Modellgenauigkeit 40 %, User 
 3. **Bias ist der Hauptfeind der Energiesumme.** Zufällige Fehler mitteln sich über den Ausfall heraus, ein systematischer Versatz nicht.
 4. **Unsicherheit wird immer mitgeliefert.** Jede Vorhersage hat ein Band, jede kWh-Zahl eine Spanne (P10/P50/P90). Das ist für Versicherungen der eigentliche Mehrwert.
 5. **Schnelle Iteration.** Ein kompletter Harness-Lauf über alle Modelle dauert unter 30 Sekunden.
-6. **Bewertung ist Konfiguration.** Metriken und Gewichtung stehen in einer Datei, nicht im Code, weil wir das Testformat erst morgen kennen.
+6. **Bewertung ist Konfiguration.** Metriken und Gewichtung stehen in einer Datei, nicht im Code, weil wir das Testformat noch nicht kennen.
 7. **Kontrakt zuerst.** Schnittstellen stehen fest, bevor implementiert wird. Jeder kann gegen Mocks arbeiten.
 
 ## Architekturentscheidungen
@@ -27,7 +27,7 @@ Ausgeliefert wird eine statische Web-App ohne Server. Der Rechenkern ist das Pyt
 
 | # | Entscheidung | Begründung |
 | --- | --- | --- |
-| ADR-1 | Python 3.14 für Modelle, Energie und Harness (pandas, numpy, scipy, scikit-learn, statsmodels; Paketverwaltung mit `uv`). Im Engine-Pfad nur Pakete, die Pyodide bereitstellt; keine Dateizugriffe, keine Threads. Pyodide `314.0.7` (Python 3.14.2, numpy 2.4.6, pandas 3.0.2), exakt festgelegt in `web/package.json`. Das native venv nutzt dieselben numpy- und pandas-Versionen (`pyproject.toml`), damit Harness und Browser identisch rechnen; bei einem Pyodide-Update beide Stellen gemeinsam ändern. Abhängigkeiten von `windgap` heute: nur numpy und pandas; jedes weitere Paket verlängert den Kaltstart | Mathe-Studierende arbeiten direkt darin; derselbe Code läuft in Harness und Browser |
+| ADR-1 | Python 3.14 für Modelle, Energie und Harness (numpy, pandas, in der Harness dazu pyyaml; scipy, scikit-learn oder statsmodels nur für Benchmarks in der Harness, nach Rückfrage; Paketverwaltung mit `uv`). Im Engine-Pfad nur Pakete, die Pyodide bereitstellt; keine Dateizugriffe, keine Threads. Pyodide `314.0.7` (Python 3.14.2, numpy 2.4.6, pandas 3.0.2), exakt festgelegt in `web/package.json`. Das native venv nutzt dieselben numpy- und pandas-Versionen (`pyproject.toml`), damit Harness und Browser identisch rechnen; bei einem Pyodide-Update beide Stellen gemeinsam ändern. Abhängigkeiten von `windgap` heute: nur numpy und pandas; jedes weitere Paket verlängert den Kaltstart | Mathe-Studierende arbeiten direkt darin; derselbe Code läuft in Harness und Browser |
 | ADR-2 | GUI mit React, Vite, TypeScript, shadcn/ui, Tailwind; Charts mit ECharts | UX zählt 30 %; ECharts kann Zoom, Brush und Unsicherheitsbänder |
 | ADR-3 | Kein Server, keine Datenbank, kein Login. Alle Berechnungen im Browser | Aufgabe fordert lokalen Betrieb im Browser; Daten verlassen den Rechner nicht |
 | ADR-4 | Zwei austauschbare Engines hinter dem Interface `Engine` (S5): `py` = Pyodide im Web Worker, führt `windgap` aus; `ts` = TypeScript-Port der Produktmodelle. Auswahl per URL-Parameter `?engine=py` bzw. `?engine=ts` und Schalter in der GUI. Scheitert `py` beim Laden, wechselt die App automatisch auf `ts` | Wechsel in Sekunden; Demo hängt nie an Pyodide |
@@ -228,9 +228,9 @@ Wir bauen eine Modellleiter aus Measure-Correlate-Predict-Verfahren (MCP), dem S
 \hat{P}_t = \mathbb{E}\left[P(v)\right], \quad v \sim \mathcal{N}(\hat{\mu}_t, \hat{\sigma}_t^2)
 ```
 
-Das holt die von LR weggenommene Streuung zurück und minimiert zugleich den Leistungs-RMSE. Numerisch mit Gauß-Hermite-Quadratur (ca. 20 Stützstellen), in einer Zeile erklärbar. Die Harness vergleicht beide Varianten.
+Das holt die von LR weggenommene Streuung zurück und minimiert zugleich den Leistungs-RMSE. Numerisch mit Gauß-Hermite-Quadratur (ca. 20 Stützstellen), in einer Zeile erklärbar. Die Harness hat das bestätigt (siehe „Umgesetzt“).
 
-**Unsicherheit:** σ kommt aus Fehlern auf ungesehenen Trainingsdaten (Leave-one-block-out, S3), nicht aus der Trainingsanpassung, und wächst linear mit der vorhergesagten Windgeschwindigkeit. Ergebnis: `coverage_80` 0,78–0,83 je Datensatz (vorher mit σ = 1 m/s: 0,37–0,64). Ein konstantes σ (80-%-Quantil) gab ähnliche Abdeckung, aber schlechtere Leistungsfehler und ein zu schmales Energieband bei langen Ausfällen.
+**Unsicherheit:** σ kommt aus Fehlern auf ungesehenen Trainingsdaten (Leave-one-block-out, S3), nicht aus der Trainingsanpassung, und wächst linear mit der vorhergesagten Windgeschwindigkeit. Ergebnis: `coverage_80` 0,78–0,83 je Datensatz; ein festes σ = 1 m/s ergäbe 0,37–0,64. Ein konstantes σ (80-%-Quantil) gab ähnliche Abdeckung, aber schlechtere Leistungsfehler und ein zu schmales Energieband bei langen Ausfällen.
 
 **Umgesetzt (`windgap/models/linear.py`):** M1 `linear_regression` und M2 `variance_ratio` sind eine Klasse, die sich nur in (a, b) unterscheidet; M3 ist der Parameter `lag_max_min` (Standard 60): τ ∈ \[−60, 60\] min maximiert die Korrelation auf den Trainingsdaten. Die ersten τ Schritte des Ausfalls nehmen die gemessene Referenz davor (Kontext, S3). Harness (Score, kleiner besser; identity = 1): LR 0,71, LR ohne Lag 0,75, VR 0,79 (mit Referenz-Kontext um das Fenster). τ hilft auf Synthetik (+20 min), Demo und Hamburg, ±180 min bringt nichts zusätzlich. **LR schlägt VR auch bei der Energie** (`energy_wape_pct` 40 % gegen 50 %): E[P(v)] über die kalibrierte Verteilung holt die Streuung zurück, die LR im Mittelwert verliert (Hypothese oben bestätigt). LR ist deshalb Standard in der GUI.
 
@@ -240,7 +240,7 @@ Das holt die von LR weggenommene Streuung zurück und minimiert zugleich den Lei
 
 ## Harness
 
-Die Harness simuliert hunderte künstliche Ausfälle im Trainingszeitraum und bewertet jedes Modell darauf genau so, wie die Jury es morgen tut. Ein Befehl, unter 30 Sekunden, Ergebnis als Leaderboard.
+Die Harness simuliert hunderte künstliche Ausfälle im Trainingszeitraum und bewertet jedes Modell darauf genau so, wie die Jury es tut. Ein Befehl, unter 30 Sekunden, Ergebnis als Leaderboard.
 
 ```bash
 uv run python -m harness --config configs/eval.yaml --models all
@@ -283,9 +283,9 @@ Prozentwerte fehlen in Szenarien ohne echte Energie (Flaute). Über Szenarien fa
 
 **Ausgabe:** `runs/<zeit>_<commit>/` mit `config.yaml` (Konfiguration und Aufruf), `results.csv` (eine Zeile je Modell × Szenario; CSV statt Parquet, weil pyarrow eine neue Abhängigkeit wäre) und `leaderboard.csv` (Modell × Datensatz × Länge, inkl. `all`), dazu im Terminal drei Tabellen: gesamt, je Datensatz, je Ausfalllänge. Ein Commit mit lokalen Änderungen heißt `<commit>-dirty`. Aufschlüsselung nach Windklasse folgt im Diagnose-Notebook.
 
-**Diagnose-Notebook `notebooks/diagnose.ipynb`** für menschliches Debugging: Überlagerung echt/vorhergesagt für ein wählbares Szenario; Streudiagramm Ziel gegen Referenz mit Modellgeraden; Residuen gegen Referenzwind, gegen Uhrzeit und gegen Ausfalllänge; Fehlerbeitrag zur Energie je Windklasse. Diese Ansichten zeigen, warum ein Modell an einem Tag versagt, und sind wichtiger als eine Karte.
+**Diagnose-Notebook `notebooks/diagnose.ipynb`** (geplant, noch nicht angelegt) für menschliches Debugging: Überlagerung echt/vorhergesagt für ein wählbares Szenario; Streudiagramm Ziel gegen Referenz mit Modellgeraden; Residuen gegen Referenzwind, gegen Uhrzeit und gegen Ausfalllänge; Fehlerbeitrag zur Energie je Windklasse. Diese Ansichten zeigen, warum ein Modell an einem Tag versagt, und sind wichtiger als eine Karte.
 
-**Testdaten für heute Abend:** ein Generator für synthetische Paare (Weibull-verteilter Wind, Korrelation ca. 0,85, Lag 20 min, Tagesgang, Rauschen) mit bekannter Wahrheit, plus fünf echte Stationspaare vom DWD (siehe Externe Daten). Damit läuft die ganze Kette, bevor die echten Daten da sind.
+**Testdaten ohne Challenge-Daten:** ein Generator für synthetische Paare (Weibull-verteilter Wind, Korrelation ca. 0,85, Lag 20 min, Tagesgang, Rauschen) mit bekannter Wahrheit, plus fünf echte Stationspaare vom DWD (siehe Externe Daten). Damit läuft die ganze Kette, bevor die echten Daten da sind.
 
 ## GUI-Anforderungen
 
@@ -313,7 +313,7 @@ Die GUI führt in fünf Schritten von den Dateien zur kWh-Zahl. Jede Pflichtanfo
 
 **UX-Regeln:** Jeder Schritt zeigt in einem Satz, was er tut. Ein Lauf darf höchstens 3 Sekunden dauern, sonst Ladeanzeige mit Text. Zahlen immer mit Einheit; Energie und Leistung über `fmtAmount` (ab 100 ganzzahlig, darunter 3 signifikante Stellen, nie „0 kW“ für kleine Werte). Leere und Fehlerzustände sind gestaltet, nicht rohe Stacktraces.
 
-**Karte:** nur als optionales Modul, falls morgen Koordinaten vorliegen. Die Debugging-Ansichten für die Modellarbeit liegen im Diagnose-Notebook, nicht in der Produkt-GUI.
+**Karte:** nur als optionales Modul, falls Koordinaten vorliegen. Die Debugging-Ansichten für die Modellarbeit liegen im Diagnose-Notebook, nicht in der Produkt-GUI.
 
 ## Externe Daten und Vortraining
 
@@ -328,7 +328,7 @@ Empfehlung: externe Daten heute als realistische Testpaare für die Harness nutz
 
 1. **Testbett (hoch, heute):** 3–5 DWD-Stationspaare mit 20–60 km Abstand laden. Damit prüfen wir, ob unsere Modellrangfolge stabil ist oder nur auf einem Datensatz gut aussieht.
 2. **Vorwissen (mittel):** typische Lags, Tagesgang, ob VR oder LR besser abschneidet. Liefert gute Startwerte und Argumente für die Präsentation.
-3. **Zusatzregressoren (Bonus 2):** Temperatur und Druck aus ERA5 am Standort, als Proxy für Stabilität. Nur wenn morgen Koordinaten vorliegen, und nur wenn die Harness einen Gewinn zeigt.
+3. **Zusatzregressoren (Bonus 2):** Temperatur und Druck aus ERA5 am Standort, als Proxy für Stabilität. Nur wenn Koordinaten vorliegen, und nur wenn die Harness einen Gewinn zeigt.
 4. **Vortraining eines Modells (niedrig):** nicht empfohlen.
 
 **Umgesetzt (`make dwd`, `harness/dwd.py`):** fünf Paare aus `recent/` (FF_10, 10-Minuten-Mittel in UTC, ca. 10 m Höhe), 15.09.–15.10.2026 (30 Tage wie die Challenge), im Challenge-Format nach `data/dwd/<paar>/` mit der generischen Leistungskurve. Nur stdlib und pandas, keine erfundenen Werte; Lücken bleiben NaN.
@@ -360,11 +360,11 @@ Wir liefern zwei Varianten aus demselben Build, damit eine unbekannte Umgebung b
 - *Abgabe muss eine HTML-Datei oder ein Ordner sein:* beide Varianten sind genau das. Der Ordner enthält zusätzlich `windgap.html` als Einstieg ohne Webserver.
 - *Wir können nicht auf den Rechnern der Jury testen:* wir testen auf allen drei Team-Laptops in mehreren Browsern und ohne Internet (Testplan unten). Die GUI zeigt in der Fußzeile die aktive Engine und Version.
 
-**Testplan heute Abend:**
+**Testplan auf den Team-Laptops:**
 
 - [ ] `windgap.html` per Doppelklick, WLAN aus: Windows und macOS; Chrome, Firefox, Edge bzw. Safari
 - [ ] `windgap-web/` über GitHub Pages: gleiche Browser, Kaltstart- und Warmstartzeit von Pyodide messen
-- [ ] Engine-Schalter: identische Ergebnisse in `py` und `ts` für das Dummy-Modell
+- [ ] Engine-Schalter: gleiche Ergebnisse in `py` und `ts` für alle Modelle (vitest prüft beide gegen die Golden-Fixtures; hier der Blick in die GUI)
 - [ ] Rückfall: Pyodide-Dateien absichtlich entfernen, App muss auf `ts` wechseln und das anzeigen
 
 **Entscheidungsregel:** Standard-Engine ist `py`, wenn der Kaltstart unter 10 Sekunden liegt und alle Tests grün sind. Sonst ist `ts` Standard, und `py` bleibt als Nachweis „der Browser rechnet mit demselben Kern wie unsere Harness“.
@@ -391,15 +391,15 @@ fixtures/
   predict/demo.csv              Demo-Ziel gefüllt von harness.predict, Spezifikation des GUI-Exports
 configs/     eval.yaml
 data/        synthetic/  dwd/ (`make dwd`, nicht eingecheckt)  challenge/ (nicht eingecheckt, bis geklärt ist, ob öffentlich erlaubt)
-notebooks/   diagnose.ipynb
+(notebooks/   diagnose.ipynb)
 runs/        Harness-Ergebnisse, nicht eingecheckt
 web/                        Vite + React + shadcn (Nova/Radix) + Tailwind v4 + ECharts + MST, CLAUDE.md
   src/engine/  contract.ts (S5)  index.ts (createEngine)  py/ (Worker)  ts/ (Port)
   src/data/    CSV-Import, Zeitumstellung, Ausfallerkennung, Dateizuordnung, Request-Bau, Demo-Daten (TS)
-  scripts/     fetch-pyodide.mjs
+  scripts/     fetch-pyodide.mjs  screenshots.mjs (make screenshots)  robustness.mjs (make robustness)
   src/state/   MST-Stores
   src/steps/   Upload, Outage, Method, Results, Export
-  src/components/  charts/ (ECharts-Wrapper)  ui/ (shadcn)
+  src/components/  format.ts  metrics.ts  Warnings.tsx  HowItWorks.tsx  charts/ (ECharts-Wrapper)  ui/ (shadcn)
   public/pyodide/  Pyodide-Dateien, nicht eingecheckt, per Skript geholt
   public/py/       Wheel von `make wheel`, nicht eingecheckt
 dist/        windgap.html  windgap-web/   (von `make build`)

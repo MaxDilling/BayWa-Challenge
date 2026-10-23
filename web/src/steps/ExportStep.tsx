@@ -2,7 +2,7 @@ import { Check, Copy, Download, Mail } from 'lucide-react'
 import { observer } from 'mobx-react-lite'
 import { useState } from 'react'
 import { AnalysisState } from '@/components/AnalysisState'
-import { fmtDateTime, fmtDuration, fmtNum, fmtPct, isoBerlin, STEP_MS, toLocalInput } from '@/components/format'
+import { fmtDateTime, fmtDuration, fmtNum, fmtPct, HOUR, isoBerlin, STEP_MS, toLocalInput } from '@/components/format'
 import { BAND_HINT, farmText, headline } from '@/components/metrics'
 import { Section } from '@/components/Section'
 import { Button } from '@/components/ui/button'
@@ -24,7 +24,7 @@ function predictionRows({ prediction, energy }: AnalyzeResponse): string[][] {
       mean.toFixed(3),
       prediction.q10[i].toFixed(3),
       prediction.q90[i].toFixed(3),
-      (kwh / (STEP_MS / 3_600_000)).toFixed(2),
+      (kwh / (STEP_MS / HOUR)).toFixed(2),
       kwh.toFixed(3),
       cumulative[i].toFixed(3),
     ]

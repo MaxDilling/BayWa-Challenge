@@ -1,11 +1,11 @@
 // Display formatting: times in Europe/Berlin, numbers in en-US with a unit.
 import { berlinCandidates } from '@/data/berlin'
 import type { Span } from '@/data'
+import { STEP_MS } from '@/engine/ts/frame'
 
+export { STEP_MS }
+export const HOUR = 3_600_000
 const TZ = 'Europe/Berlin'
-const HOUR = 3_600_000
-/** The 10-minute grid step of every series. */
-export const STEP_MS = 600_000
 
 const dateTime = new Intl.DateTimeFormat('en-GB', {
   timeZone: TZ,

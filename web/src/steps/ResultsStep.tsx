@@ -3,7 +3,7 @@ import { useCallback } from 'react'
 import { AnalysisState } from '@/components/AnalysisState'
 import { Chart, type ChartTheme } from '@/components/charts/Chart'
 import { byId, gridPoints, tooltipHtml } from '@/components/charts/series'
-import { fmtAmount, fmtAxisTime, fmtDayTime, fmtDuration, fmtNum, fmtPct, fmtSpan, STEP_MS } from '@/components/format'
+import { fmtAmount, fmtAxisTime, fmtDayTime, fmtDuration, fmtNum, fmtPct, fmtSpan, HOUR, STEP_MS } from '@/components/format'
 import { Hint } from '@/components/Hint'
 import { BAND_HINT, farmText, METRICS, rangeText, verdict } from '@/components/metrics'
 import { Notice } from '@/components/Notice'
@@ -13,7 +13,6 @@ import type { Dataset, Span } from '@/data'
 import type { AnalyzeResponse } from '@/engine'
 import { store } from '@/state/store'
 
-const HOUR = 3_600_000
 const CHECKS_ID = 'data-checks'
 
 export const ResultsStep = observer(function ResultsStep() {

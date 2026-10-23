@@ -55,7 +55,7 @@ class LinearRegression(_Linear):
     label = "Linear regression (MCP)"
     tagline = "Least-squares line through the reference wind, shifted by the delay between the farms."
     summary = ("The missing wind speed follows a straight line through the reference wind speed, fitted by least "
-               "squares on the time both parks measured. The reference is shifted by the delay τ at which both parks "
+               "squares on the time both farms measured. The reference is shifted by the delay τ at which both farms "
                "agree best, because weather reaches them one after the other.")
 
     @staticmethod
@@ -70,7 +70,7 @@ class VarianceRatio(_Linear):
     tagline = "Line that keeps the target's mean and spread, shifted by the delay between the farms."
     summary = ("The missing wind speed follows a straight line through the reference wind speed that keeps the "
                "target's average and spread from the training period: b is the ratio of their standard deviations. "
-               "The reference is shifted by the delay τ at which both parks agree best.")
+               "The reference is shifted by the delay τ at which both farms agree best.")
 
     @staticmethod
     def coefficients(x: np.ndarray, y: np.ndarray) -> tuple[float, float]:

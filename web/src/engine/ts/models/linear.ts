@@ -69,7 +69,7 @@ const dot = (a: Float64Array, b: Float64Array) => a.reduce((s, v, i) => s + v * 
 export class LinearRegression extends Linear {
   protected summary =
     'The missing wind speed follows a straight line through the reference wind speed, fitted by least squares on the ' +
-    'time both parks measured. The reference is shifted by the delay τ at which both parks agree best, because ' +
+    'time both farms measured. The reference is shifted by the delay τ at which both farms agree best, because ' +
     'weather reaches them one after the other.'
   protected coefficients: Coefficients = (x, y) => {
     const [cx, cy] = [centered(x), centered(y)]
@@ -82,7 +82,7 @@ export class VarianceRatio extends Linear {
   protected summary =
     "The missing wind speed follows a straight line through the reference wind speed that keeps the target's " +
     'average and spread from the training period: b is the ratio of their standard deviations. The reference is ' +
-    'shifted by the delay τ at which both parks agree best.'
+    'shifted by the delay τ at which both farms agree best.'
   protected coefficients: Coefficients = (x, y) => {
     const [cx, cy] = [centered(x), centered(y)]
     const b = Math.sqrt(dot(cy, cy) / dot(cx, cx))

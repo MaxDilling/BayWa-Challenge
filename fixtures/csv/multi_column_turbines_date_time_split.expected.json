@@ -1,0 +1,68 @@
+[
+ {
+  "id": "WTG01",
+  "grid": {
+   "t0": 1790805600000,
+   "stepS": 600,
+   "values": [
+    5.1,
+    5.2,
+    null
+   ]
+  },
+  "report": {
+   "rows": 3,
+   "measured": 2,
+   "missing": 1,
+   "negative": 0,
+   "ignoredColumns": [
+    "Temperatur (\u00b0C)",
+    "Windrichtung (\u00b0)"
+   ]
+  }
+ },
+ {
+  "id": "WTG02",
+  "grid": {
+   "t0": 1790805600000,
+   "stepS": 600,
+   "values": [
+    5.3,
+    null,
+    5.5
+   ]
+  },
+  "report": {
+   "rows": 3,
+   "measured": 2,
+   "missing": 1,
+   "negative": 1,
+   "ignoredColumns": [
+    "Temperatur (\u00b0C)",
+    "Windrichtung (\u00b0)"
+   ]
+  }
+ },
+ {
+  "id": "WTG03",
+  "grid": {
+   "t0": 1790805600000,
+   "stepS": 600,
+   "values": [
+    null,
+    4.9,
+    5.0
+   ]
+  },
+  "report": {
+   "rows": 3,
+   "measured": 2,
+   "missing": 1,
+   "negative": 0,
+   "ignoredColumns": [
+    "Temperatur (\u00b0C)",
+    "Windrichtung (\u00b0)"
+   ]
+  }
+ }
+]

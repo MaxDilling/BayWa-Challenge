@@ -2,6 +2,7 @@ import { readdirSync, readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { analyze } from '@/engine/ts/tsEngine'
 import { buildDataset, loadDemo, parsePowerCurveCsv, parseWindCsv, toRequest } from '.'
+import { isSummerTime } from './berlin'
 import { detectOutages } from './outage'
 
 const dir = new URL('../../../fixtures/csv/', import.meta.url)
@@ -13,18 +14,19 @@ const cases = readdirSync(dir)
     expected: JSON.parse(readFileSync(new URL(f.replace('.csv', '.expected.json'), dir), 'utf8')),
   }))
 
-describe.each(cases)('fixtures/csv/$name', ({ csv, expected }) => {
-  it('parses to the expected grid', () => {
-    if (expected.error) return expect(() => parseWindCsv('x', csv)).toThrow(expected.error)
-    const { grid, report } = parseWindCsv('x', csv)
-    expect(grid).toEqual(expected.grid)
-    expect(report).toEqual(expected.report)
+describe.each(cases)('fixtures/csv/$name', ({ name, csv, expected }) => {
+  it('parses as expected', () => {
+    const parse = () => (name.startsWith('curve_') ? parsePowerCurveCsv(csv) : parseWindCsv(name, csv))
+    if (expected.error) return expect(parse).toThrow(expected.error)
+    expect(parse()).toEqual(expected)
   })
 })
 
 const T0 = Date.UTC(2026, 9, 1)
 const grid = (values: (number | null)[], t0 = T0) => ({ t0, stepS: 600 as const, values })
-const series = (values: (number | null)[]) => parseWindCsv('s', 'time,wind\n' + values.map((v, i) => `${new Date(T0 + i * 600_000).toISOString()},${v ?? 'NaN'}`).join('\n'))
+const csv = (values: (number | null)[], t0 = T0) =>
+  'time,wind\n' + values.map((v, i) => `${new Date(t0 + i * 600_000).toISOString()},${v ?? 'NaN'}`).join('\n')
+const series = (values: (number | null)[]) => parseWindCsv('s', csv(values))[0]
 
 describe('outage detection', () => {
   it('separates outages (≥ 30 min) from measurement gaps and ignores runs without reference data', () => {
@@ -38,6 +40,11 @@ describe('outage detection', () => {
   it('finds an outage running to the end of the reference data', () => {
     const { outages } = detectOutages(grid([1, 1]), [grid([1, 1, 1, 1, 1])])
     expect(outages).toEqual([{ startMs: T0 + 2 * 600_000, endMs: T0 + 5 * 600_000 }])
+  })
+
+  it('finds an outage before a target file starts', () => {
+    const { outages } = detectOutages(grid([1, 1], T0 + 3 * 600_000), [grid([1, 1, 1, 1, 1])])
+    expect(outages).toEqual([{ startMs: T0, endMs: T0 + 3 * 600_000 }])
   })
 })
 
@@ -73,3 +80,22 @@ describe('demo data', () => {
     expect(response.energy.kwhP50).toBeGreaterThan(0)
   })
 })
+
+describe('large files', () => {
+  it('reads one year of 10-minute Berlin time in well under a second', () => {
+    const start = Date.UTC(2025, 11, 31, 23)
+    const rows = Array.from({ length: 52_560 }, (_, i) => {
+      const utc = start + i * 600_000
+      const local = new Date(utc + (isSummerTime(utc) ? 2 : 1) * 3_600_000).toISOString().slice(0, 19).replace('T', ' ')
+      return `${local};${((i % 250) / 10).toFixed(1).replace('.', ',')}`
+    })
+    const text = 'Timestamp;Wind speed (m/s)\n' + rows.join('\n')
+    const started = performance.now()
+    const [year] = parseWindCsv('year', text)
+    const ms = performance.now() - started
+    expect(year.grid.t0).toBe(start)
+    expect(year.report.missing).toBe(0)
+    expect(ms).toBeLessThan(500)
+  })
+})
+

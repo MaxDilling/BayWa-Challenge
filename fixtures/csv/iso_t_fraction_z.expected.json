@@ -1,0 +1,22 @@
+[
+ {
+  "id": "iso_t_fraction_z",
+  "grid": {
+   "t0": 1792888800000,
+   "stepS": 600,
+   "values": [
+    6.1,
+    6.2,
+    6.3,
+    6.4
+   ]
+  },
+  "report": {
+   "rows": 4,
+   "measured": 4,
+   "missing": 0,
+   "negative": 0,
+   "ignoredColumns": []
+  }
+ }
+]

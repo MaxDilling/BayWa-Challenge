@@ -66,8 +66,18 @@ Drei Kontrakte entkoppeln das Team: das interne Datenformat (T1), das Modell-Int
 
 ### S1 Eingabedateien
 
-- **Winddaten:** CSV mit Zeitstempel (Europe/Berlin) und Windgeschwindigkeit (m/s). Parser erkennt Trennzeichen (`,` oder `;`), Dezimalkomma, Spaltennamen und Datumsformat automatisch. Doppelte Stunde bei Zeitumstellung: Reihenfolge entscheidet (erste = Sommerzeit); Zeiten in der übersprungenen Frühlingsstunde sind ein Fehler. Zeitstempel mit Offset (`Z`, `+02:00`) gelten wie angegeben. Fehlwerte: leer, `NaN`, `NA`, `null`, `-`; negative Werte (z. B. `-999`) gelten als fehlend und werden gezählt. Referenzlücken im Ausfall bis 6 Schritte (1 h) überbrückt der Import linear, längere sind ein Fehler.
-- **Leistungskurve:** CSV mit `wind_speed_ms` und `power_kw`. Lineare Interpolation, 0 kW unterhalb des ersten und oberhalb des letzten Punkts (Abschaltgeschwindigkeit). Optional `n_turbines` je Park. **\[offen\]** Format der echten Kurven.
+Beide Importe (TS in `web/src/data/` für die GUI, Python in `windgap/core/io.py` für die Harness) folgen denselben Regeln und bestehen dieselben Fälle in `fixtures/csv/`. Im Zweifel bricht der Import mit einer Meldung samt Zeilennummer ab, statt zu raten.
+
+- **Tabelle:** Trennzeichen Tab, `;` oder `,`: gewählt wird das, bei dem die meisten der ersten 50 nichtleeren Zeilen so viele Spalten haben wie die letzte davon (bei Gleichstand in dieser Reihenfolge). Die erste Zeile mit dieser Spaltenzahl, die eine Zahl oder einen Zeitstempel enthält, ist die erste Datenzeile; alles davor ist Vorspann. Kopfzeile ist die erste Vorspann-Zeile mit voller Spaltenzahl (eine Einheitenzeile darunter wird übersprungen). Jede Datenzeile hat dieselbe Spaltenzahl, sonst Fehler. Zellen werden getrimmt, umschließende Anführungszeichen entfernt.
+- **Zahlen:** Dezimalpunkt oder -komma; Tausendertrenner nur in eindeutiger Form (`1.234,5`, `1,234.5`). Fehlwerte: leer, `NaN`, `NA`, `n/a`, `#N/A`, `#NV`, `null`, `none`, `-`.
+- **Winddaten:** CSV mit Zeitstempel (Europe/Berlin) und einer oder mehreren Spalten mit 10-Minuten-Mittelwerten der Windgeschwindigkeit (m/s).
+  - *Zeitspalte:* die erste Spalte, deren Zelle in der ersten Datenzeile ein Zeitstempel ist; Datum und Uhrzeit dürfen in zwei benachbarten Spalten stehen (`01.10.2026;00:10`).
+  - *Datumsformate:* Jahr zuerst ist immer Jahr-Monat-Tag (`2026-10-01`, `2026/10/01`, `2026.10.01`), mit `T` oder Leerzeichen vor der Uhrzeit, Sekunden und Sekundenbruchteile erlaubt. `01.10.2026` ist immer Tag.Monat. `01/10/2026` und `01-10-2026` entscheidet die Datei: Ist in einer Zeile der erste Teil > 12, steht der Tag vorn, ist der zweite Teil > 12, der Monat; entscheidet keine Zeile oder widersprechen sich Zeilen, ist das ein Fehler. Ungültige Daten (31.02.) sind kein Zeitstempel.
+  - *Zeitzone:* Zeitstempel mit Offset (`Z`, `+02:00`) gelten wie angegeben. Ohne Offset gilt Europe/Berlin, außer der Kopf der Zeitspalte nennt `UTC` oder `GMT` ohne folgenden Offset (z. B. `Timestamp (UTC)`), dann UTC. Doppelte Stunde bei Zeitumstellung: Reihenfolge entscheidet (erste = Sommerzeit); Zeiten in der übersprungenen Frühlingsstunde sind ein Fehler.
+  - *Raster:* Zeilen stehen chronologisch, sonst Fehler. Ein doppelter Zeitstempel (außer der doppelten Herbststunde) ist ein Fehler, auch bei gleichem Wert, weil er auf einen kaputten Export hinweist. Jeder Zeitstempel liegt auf dem 10-Minuten-Raster (`:00`, `:10` … mit Sekunde 0), und der Median der Abstände aufeinanderfolgender Zeilen ist 10 min; sonst Fehler „must be 10-minute values“ (z. B. bei `00:05` oder Stundenwerten). Fehlende Zeilen werden `null`.
+  - *Windspalten:* Spalten, deren Kopf nach etwas anderem aussieht (Richtung, Temperatur, Druck, Feuchte, Niederschlag, Leistung, Drehzahl, Status, Qualität, Böe, Maximum, Standardabweichung; Muster in `wind.ts`/`io.py`), werden ignoriert und im Bericht genannt. Nennt ein übriger Kopf Wind (`wind`, `speed`, `geschw`, `m/s`, `ws`), sind genau diese Spalten Wind; sonst jede übrige Spalte mit mindestens einer Zahl (z. B. `WTG01;WTG02` oder `time,target,reference`). Jede Windspalte wird eine eigene Reihe. ID: bei einer Windspalte der Dateiname, sonst der Spaltenkopf (ohne Kopf `<Datei> column <n>`).
+  - *Werte:* Negative Werte (z. B. `-999`) gelten als fehlend und werden gezählt; anderer Text in einer Windspalte ist ein Fehler. Referenzlücken im Ausfall bis 6 Schritte (1 h) überbrückt der Import linear, längere sind ein Fehler.
+- **Leistungskurve:** CSV ohne Zeitstempel mit Windgeschwindigkeit (m/s) und Leistung je Turbine. Windspalte: erster Kopf mit `wind`, `speed`, `geschw`, `m/s` oder beginnend mit `v`/`ws`, sonst Spalte 1. Leistungsspalten: Köpfe mit `power`, `leistung`, `kw`, `mw` oder beginnend mit `P`, außer Leistungs- und Schubbeiwert (`Cp`, `Ct`, `coefficient`, `thrust`, `Schub`); keine solche: die erste andere Spalte. **Mehrere Leistungsspalten** (z. B. je Luftdichte oder Turbinentyp) sind ein Fehler, der die Spalten nennt: Wir wählen nicht still eine Kurve. Nennt der Kopf der Leistungsspalte MW und nicht kW, wird mit 1000 multipliziert. Windgeschwindigkeiten streng steigend, jede Zeile vollständig, mindestens zwei Punkte. Lineare Interpolation, 0 kW unterhalb des ersten und oberhalb des letzten Punkts (Abschaltgeschwindigkeit). Anzahl der Turbinen gibt die GUI an. **\[offen\]** Format der echten Kurven.
 
 ### S2 Internes Datenformat (T1)
 
@@ -93,7 +103,7 @@ class Outage:
     end: pd.Timestamp        # UTC, exklusiv
 ```
 
-Ausfallerkennung: zusammenhängende NaN-Blöcke im Ziel von mindestens 3 Zeitschritten (30 min), in denen die Referenz Werte hat. Kürzere Lücken werden als Messlücken markiert, nicht als Ausfall.
+Ausfallerkennung: zusammenhängende NaN-Blöcke im Ziel von mindestens 3 Zeitschritten (30 min), in denen eine Referenz Werte hat. Gesucht wird auf dem gemeinsamen Zeitraum von Ziel und Referenzen: Endet die Zieldatei früher oder beginnt sie später als eine Referenz, ist der fehlende Rand ebenfalls ein Ausfall. Kürzere Lücken werden als Messlücken markiert, nicht als Ausfall.
 
 ### S3 Modell-Interface (T2)
 
@@ -316,7 +326,7 @@ Heute Abend steht die komplette Kette einmal durch, mit synthetischen Daten und 
 ```
 CLAUDE.md  SPEC.md  CHALLENGE.md  Makefile  pyproject.toml  uv.lock
 windgap/                    Python-Kern, Pyodide-kompatibel, einziger Inhalt des Wheels
-  core/      schema.py  grid.py  powercurve.py  energy.py  metrics.py  (io.py  outage.py)
+  core/      schema.py  grid.py  powercurve.py  energy.py  metrics.py  io.py  (outage.py)
   models/    CLAUDE.md  base.py  registry.py  identity.py  (linear.py  variance_ratio.py ...)
   backtest.py               fold() + backtest(), gemeinsam für Engine-Validierung und Harness
   engine.py                 handle(request_json) -> response_json, list_models()
@@ -351,7 +361,8 @@ In Klammern: geplant, noch nicht angelegt. Leere Platzhalterdateien gibt es nich
 - [x] PM: **Durchstich Python im Browser:** Pyodide im Worker, `windgap` als Wheel laden, `identity` auf Demo-Daten. Gemessen (headless Chromium, lokal): Kaltstart 3,3–3,4 s, `analyze` 40–80 ms; Ergebnis gleich dem nativen bis 1e-12 (vitest). Rückfall auf `ts` getestet bei fehlendem Pyodide und fehlendem Wheel. Diagramm folgt mit der GUI
 - [ ] PM: GUI-Gerüst mit fünf Schritten, Engine-Schalter und automatischem Rückfall
 - [x] PM: CSV-Import (TS) mit Zeitumstellung und Ausfallerkennung, mit Tests gegen `fixtures/csv/`; Demo-Daten `data/synthetic/` (`make demo`)
-- [ ] Python-Import `windgap/core/io.py` für die Harness, besteht dieselben `fixtures/csv/`
+- [x] Python-Import `windgap/core/io.py` für die Harness, besteht dieselben `fixtures/csv/`; beide Importe gehärtet (S1: Formate, mehrere Windspalten, Vorspann, Raster-Prüfung, Leistungskurven-Varianten), 1 Jahr 10-Minuten-Daten in unter 0,2 s (TS) bzw. 0,3 s (Python)
+- [ ] Python-Ausfallerkennung (`windgap/core/outage.py`) für echte Daten in der Harness
 - [ ] PM: Build beider Varianten, GitHub-Pages-Deploy per GitHub Action
 - [ ] Mathe A: MCP-Grundlagen lesen (LR vs. VR), M0–M2 gegen das Interface S3, Erklärtexte, Fixture je Modell
 - [x] Synthetik-Generator (`harness/synthetic.py`), Metriken (`windgap/core/metrics.py`), Backtest-Fold (`windgap/backtest.py`)

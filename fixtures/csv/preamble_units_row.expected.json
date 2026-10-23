@@ -1,0 +1,20 @@
+[
+ {
+  "id": "preamble_units_row",
+  "grid": {
+   "t0": 1790805600000,
+   "stepS": 600,
+   "values": [
+    5.0,
+    5.2
+   ]
+  },
+  "report": {
+   "rows": 2,
+   "measured": 2,
+   "missing": 0,
+   "negative": 0,
+   "ignoredColumns": []
+  }
+ }
+]

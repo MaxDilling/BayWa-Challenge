@@ -29,7 +29,9 @@ export const UploadStep = observer(function UploadStep() {
           title="Target farm"
           hint={`The farm with the outage. ${WIND_HINT}`}
           read={parseWindCsv}
-          onRead={([t]) => store.setInputs({ target: t })}
+          onRead={([[t, ...others]]) =>
+            store.setInputs({ target: { ...t, report: { ...t.report, ignoredColumns: [...t.report.ignoredColumns, ...others.map((o) => o.id)] } } })
+          }
         >
           {target && <SeriesReport series={target} />}
         </DropZone>
@@ -38,7 +40,10 @@ export const UploadStep = observer(function UploadStep() {
           hint={`One or more neighbouring farms that kept measuring. ${WIND_HINT}`}
           multiple
           read={parseWindCsv}
-          onRead={(added) => store.setInputs({ references: [...references.filter((r) => !added.some((a) => a.id === r.id)), ...added] })}
+          onRead={(files) => {
+            const added = files.flat()
+            store.setInputs({ references: [...references.filter((r) => !added.some((a) => a.id === r.id)), ...added] })
+          }}
         >
           {references.map((ref, i) => (
             <SeriesReport

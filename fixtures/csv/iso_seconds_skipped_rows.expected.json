@@ -1,0 +1,24 @@
+[
+ {
+  "id": "iso_seconds_skipped_rows",
+  "grid": {
+   "t0": 1790805600000,
+   "stepS": 600,
+   "values": [
+    5.1,
+    null,
+    null,
+    null,
+    5.4,
+    5.5
+   ]
+  },
+  "report": {
+   "rows": 4,
+   "measured": 3,
+   "missing": 3,
+   "negative": 0,
+   "ignoredColumns": []
+  }
+ }
+]

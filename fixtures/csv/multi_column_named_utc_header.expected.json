@@ -1,0 +1,42 @@
+[
+ {
+  "id": "target",
+  "grid": {
+   "t0": 1790812800000,
+   "stepS": 600,
+   "values": [
+    5.0,
+    5.1,
+    null,
+    null
+   ]
+  },
+  "report": {
+   "rows": 4,
+   "measured": 2,
+   "missing": 2,
+   "negative": 0,
+   "ignoredColumns": []
+  }
+ },
+ {
+  "id": "reference",
+  "grid": {
+   "t0": 1790812800000,
+   "stepS": 600,
+   "values": [
+    6.0,
+    6.1,
+    6.2,
+    6.3
+   ]
+  },
+  "report": {
+   "rows": 4,
+   "measured": 4,
+   "missing": 0,
+   "negative": 0,
+   "ignoredColumns": []
+  }
+ }
+]

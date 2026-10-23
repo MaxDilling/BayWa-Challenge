@@ -1,32 +1,35 @@
-{
- "grid": {
-  "t0": 1792885200000,
-  "stepS": 600,
-  "values": [
-   5.1,
-   null,
-   6.0,
-   null,
-   6.2,
-   6.3,
-   6.4,
-   6.5,
-   7.0,
-   7.1,
-   null,
-   7.3,
-   7.4,
-   7.5,
-   8.0,
-   null,
-   8.2
-  ]
- },
- "report": {
-  "rows": 16,
-  "negative": 1,
-  "ignoredColumns": [],
-  "measured": 13,
-  "missing": 4
+[
+ {
+  "id": "iso_berlin_autumn_change",
+  "grid": {
+   "t0": 1792885200000,
+   "stepS": 600,
+   "values": [
+    5.1,
+    null,
+    6.0,
+    null,
+    6.2,
+    6.3,
+    6.4,
+    6.5,
+    7.0,
+    7.1,
+    null,
+    7.3,
+    7.4,
+    7.5,
+    8.0,
+    null,
+    8.2
+   ]
+  },
+  "report": {
+   "rows": 16,
+   "negative": 1,
+   "ignoredColumns": [],
+   "measured": 13,
+   "missing": 4
+  }
  }
-}
+]

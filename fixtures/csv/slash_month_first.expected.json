@@ -1,0 +1,21 @@
+[
+ {
+  "id": "slash_month_first",
+  "grid": {
+   "t0": 1791841800000,
+   "stepS": 600,
+   "values": [
+    4.0,
+    4.1,
+    4.2
+   ]
+  },
+  "report": {
+   "rows": 3,
+   "measured": 3,
+   "missing": 0,
+   "negative": 0,
+   "ignoredColumns": []
+  }
+ }
+]

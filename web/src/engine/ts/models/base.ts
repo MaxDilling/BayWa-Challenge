@@ -51,17 +51,19 @@ export class Errors {
 
 export type Fit = (x: Float64Array, y: Float64Array) => (x: Float64Array) => Float64Array
 
-/** Leave-one-block-out: each of N_BLOCKS contiguous blocks is predicted by `fit` on the other blocks. */
+/** Leave-one-block-out: the measured pairs are cut into N_BLOCKS contiguous blocks of equal count; each block is
+ * predicted by `fit` on the other blocks. */
 export function calibrate(x: Float64Array, y: Float64Array, fit: Fit): Errors {
-  const n = y.length
-  const ok = x.map((v, i) => Number(!Number.isNaN(v) && !Number.isNaN(y[i])))
-  const pred = new Float64Array(n).fill(NaN)
+  const measured = [...x.keys()].filter((i) => !Number.isNaN(x[i]) && !Number.isNaN(y[i]))
+  const n = measured.length
+  const pred = new Float64Array(y.length).fill(NaN)
   let start = 0
   for (let b = 0; b < N_BLOCKS; b++) {
     const end = start + Math.floor(n / N_BLOCKS) + (b < n % N_BLOCKS ? 1 : 0)
-    const train = [...ok.keys()].filter((i) => ok[i] && (i < start || i >= end))
+    const train = [...measured.slice(0, start), ...measured.slice(end)]
+    const block = measured.slice(start, end)
     const line = fit(Float64Array.from(train, (i) => x[i]), Float64Array.from(train, (i) => y[i]))
-    pred.set(line(x.slice(start, end)), start)
+    line(Float64Array.from(block, (i) => x[i])).forEach((p, k) => (pred[block[k]] = p))
     start = end
   }
   const err = pred.map((p, i) => p - y[i])

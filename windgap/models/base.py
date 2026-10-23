@@ -57,13 +57,14 @@ class WindModel(Protocol):
 
 
 def calibrate(x: np.ndarray, y: np.ndarray, fit: Fit) -> Errors:
-    """Leave-one-block-out on the training grid (NaN = missing): each of N_BLOCKS contiguous blocks is predicted by
-    `fit` on the other blocks, so σ and the memory describe errors on unseen data, not the fit quality.
+    """Leave-one-block-out on the training grid (NaN = missing): the measured pairs are cut into N_BLOCKS contiguous
+    blocks of equal count (not equal time, or a long gap leaves blocks empty), and each block is predicted by `fit`
+    on the other blocks, so σ and the memory describe errors on unseen data, not the fit quality.
     The mean absolute error is a line in the prediction (least squares, both coefficients ≥ 0), scaled so that
     80 % of the errors lie within ±Z90 · σ_t."""
     ok = ~np.isnan(x) & ~np.isnan(y)
     pred = np.full(len(y), np.nan)
-    for block in np.array_split(np.arange(len(y)), N_BLOCKS):
+    for block in np.array_split(np.flatnonzero(ok), N_BLOCKS):
         train = ok.copy()
         train[block] = False
         pred[block] = fit(x[train], y[train])(x[block])

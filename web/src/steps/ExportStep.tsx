@@ -39,6 +39,13 @@ function download(name: string, text: string) {
   setTimeout(() => URL.revokeObjectURL(a.href))
 }
 
+/** The reference the model used; with several, why this one. */
+function referenceText({ references }: Dataset, { explanation: { diagnostics: d } }: AnalyzeResponse) {
+  if (d.reference_index === undefined) return references[0].id
+  const others = references.filter((_, i) => i !== d.reference_index).map((r) => r.id)
+  return `${references[d.reference_index].id} (chosen from ${references.length} farms because it tracked the target best before the outage, r = ${fmtNum(d[`r_ref_${d.reference_index}`], 3)}; not used: ${others.join(', ')})`
+}
+
 function emailDraft(dataset: Dataset, outage: Span, model: string, response: AnalyzeResponse, warnings: Warning[]) {
   const v = response.validation
   const target = dataset.target.id
@@ -52,7 +59,7 @@ function emailDraft(dataset: Dataset, outage: Span, model: string, response: Ana
     'Dear Sir or Madam,',
     `we report an outage of wind farm ${target} (${farmText(dataset)}) from ${fmtDateTime(outage.startMs)} to ${fmtDateTime(outage.endMs)} (Europe/Berlin), ${fmtDuration(outage.endMs - outage.startMs)} in total.`,
     `Estimated lost energy: ${headline(response.energy).replace('Most', 'most')} The range is the 10 % to 90 % quantile (P10 to P90). ${BAND_HINT}`,
-    `Method: the missing 10-minute wind speeds were predicted from the neighbouring reference farm ${dataset.references.map((r) => r.id).join(', ')}, using the relationship learned from the ${fmtNum((outage.startMs - dataset.target.grid.t0) / 86_400_000)} days of data before the outage (${model}). The predicted wind was converted to energy with the turbine power curve, taking the uncertainty of each prediction into account.`,
+    `Method: the missing 10-minute wind speeds were predicted from the neighbouring reference farm ${referenceText(dataset, response)}, using the relationship learned from the ${fmtNum((outage.startMs - dataset.target.grid.t0) / 86_400_000)} days of data before the outage (${model}). The predicted wind was converted to energy with the turbine power curve, taking the uncertainty of each prediction into account.`,
     v.n_folds && accuracy.length
       ? `Accuracy: in ${fmtNum(v.n_folds)} simulated outages of the same length before the event, ${accuracy.join(', ')}.`
       : 'Accuracy: there was not enough data before the outage for a backtest.',

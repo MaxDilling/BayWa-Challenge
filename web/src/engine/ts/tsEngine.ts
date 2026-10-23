@@ -37,16 +37,17 @@ export function analyze(req: AnalyzeRequest): AnalyzeResponse {
     validation: finite(backtest(req.model, params, trainTarget, trainRefs, req.powerCurve, refsOut.cols[0].length)),
     explanation: { ...explanation, params: finite(explanation.params), diagnostics: finite(explanation.diagnostics) },
     energy,
-    scatter: scatter(trainTarget, trainRefs, model, explanation.diagnostics.lag_min ?? 0),
+    scatter: scatter(trainTarget, trainRefs, model, explanation.diagnostics),
     engine: { id: 'ts', version: __WINDGAP_VERSION__, ms: performance.now() - started },
   }
 }
 
-/** Training pairs as the model sees them: target(t) against the first reference at t − τ, evenly thinned; fit line =
+/** Training pairs as the model sees them: target(t) against the chosen reference at t − τ, evenly thinned; fit line =
  * in-sample prediction per 1 m/s bin of that shifted reference. */
-function scatter(target: Float64Array, refs: Frame, model: WindModel, lagMin: number): AnalyzeResponse['scatter'] {
-  const lag = Math.round(lagMin / 10)
-  const shifted = refs.cols[0].map((_, i) => refs.cols[0][i - lag] ?? NaN)
+function scatter(target: Float64Array, refs: Frame, model: WindModel, diagnostics: Record<string, number>): AnalyzeResponse['scatter'] {
+  const lag = Math.round((diagnostics.lag_min ?? 0) / 10)
+  const chosen = refs.cols[diagnostics.reference_index ?? 0]
+  const shifted = chosen.map((_, i) => chosen[i - lag] ?? NaN)
   const [ref, tgt] = pairs(shifted, target)
   const k = Math.min(ref.length, MAX_SCATTER)
   const shown = Array.from({ length: k }, (_, i) => Math.floor((i * ref.length) / k))

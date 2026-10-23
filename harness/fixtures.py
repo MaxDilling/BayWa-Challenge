@@ -54,6 +54,8 @@ def cases(model: str) -> dict[str, dict]:
 
     return {
         "basic": _request(basic["target"], {"ref_a": basic["ref"]}, basic.index[3 * 144 + 72], 36, model),
+        "decoy_first": _request(basic["target"], {"far_away": synthetic_pair(days=4, seed=9)["ref"], "ref_a": basic["ref"]},
+                                basic.index[3 * 144 + 72], 36, model),
         "two_refs_gaps": _request(target, {"ref_a": multi["ref"], "ref_b": ref_b}, multi.index[4 * 144], 144, model),
     }
 

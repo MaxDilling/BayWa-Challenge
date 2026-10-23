@@ -112,6 +112,30 @@ def gaussian_prediction(mean: np.ndarray, std: np.ndarray, index: pd.Index) -> p
     )
 
 
+def pick_reference(refs: pd.DataFrame, y: np.ndarray, lag_max: int) -> tuple[int, int, float, list[float]]:
+    """The reference column and delay τ (|τ| ≤ lag_max steps) at which the target correlates best on the training data
+    (Bonus 3: the tool picks the reference itself): (column, τ, r, best r of every column)."""
+    best, rs = (0, 0, -np.inf), []
+    for col in range(refs.shape[1]):
+        x = refs.iloc[:, col].to_numpy(dtype=float)
+        r, lag = max((correlation(*lagged_pairs(x, y, lag)), lag) for lag in range(-lag_max, lag_max + 1))
+        rs.append(r)
+        if r > best[2]:
+            best = (col, lag, r)
+    return *best, rs
+
+
+def choice_diagnostics(col: int, rs: list[float]) -> dict[str, float]:
+    """Which reference the model uses and how well each tracked the target; only when there was a choice."""
+    return {"reference_index": col, **{f"r_ref_{i}": r for i, r in enumerate(rs)}} if len(rs) > 1 else {}
+
+
+def lagged_pairs(x: np.ndarray, y: np.ndarray, lag: int) -> tuple[np.ndarray, np.ndarray]:
+    """(x(t − lag), y(t)) over the steps where both exist on the grid; NaN where a value is missing."""
+    n = len(x)
+    return x[max(0, -lag):n - max(0, lag)], y[max(0, lag):n - max(0, -lag)]
+
+
 def correlation(x: np.ndarray, y: np.ndarray) -> float:
     """Pearson r over the steps where both are measured."""
     ok = ~np.isnan(x) & ~np.isnan(y)

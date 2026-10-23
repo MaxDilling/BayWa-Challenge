@@ -31,8 +31,7 @@ export const UploadStep = observer(function UploadStep() {
 const RoleZones = observer(function RoleZones() {
   const { target, references, powerCurve, response, assignment } = store
   const [open, setOpen] = useState(!assignment && !!(target || references.length || powerCurve))
-  const r = response?.explanation.diagnostics.r
-  const chosen = response?.explanation.diagnostics.reference ?? 0
+  const d = response?.explanation.diagnostics
   return (
     <details open={open} onToggle={(e) => setOpen(e.currentTarget.open)}>
       <summary className="cursor-pointer font-medium text-primary">
@@ -63,7 +62,7 @@ const RoleZones = observer(function RoleZones() {
             <SeriesReport
               key={ref.id}
               series={ref}
-              correlation={i === chosen ? r : undefined}
+              correlation={d?.[`r_ref_${i}`] ?? (i === 0 ? d?.r : undefined)}
               onRemove={() => store.setInputs({ references: references.filter((x) => x !== ref) })}
             />
           ))}

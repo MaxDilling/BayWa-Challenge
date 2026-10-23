@@ -83,6 +83,18 @@ await shot(warned, 'warnings-1-upload.png')
 await warned.locator('nav[aria-label=Steps] button').nth(3).click()
 await shot(warned, 'warnings-4-results.png')
 await warned.close()
+
+// A second reference that does not track the target (the demo reference backwards in time): the Method step ranks both.
+const [refHead, ...refRows] = reference.trim().split('\n')
+const values = refRows.map((r) => r.split(',')[1]).reverse()
+writeFileSync(join(scratch, 'far_away.csv'), [refHead, ...refRows.map((r, i) => `${r.split(',')[0]},${values[i]}`)].join('\n'))
+const pool = await open('references', single, DESKTOP)
+await pool.locator('input[type=file]').first().setInputFiles([...demo, join(scratch, 'far_away.csv')])
+await pool.getByLabel('How many turbines').fill('4')
+await pool.getByText('kWh lost').waitFor({ state: 'attached' })
+await pool.locator('nav[aria-label=Steps] button').nth(2).click()
+await shot(pool, 'references-3-method.png')
+await pool.close()
 rmSync(scratch, { recursive: true })
 
 await variant('desktop', single, DESKTOP)

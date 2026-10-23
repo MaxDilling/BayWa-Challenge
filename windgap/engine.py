@@ -73,16 +73,17 @@ def analyze(req: dict) -> dict:
             "kwhP90": energy.kwh_p90,
             "cumulativeKwh": _floats(energy.cumulative),
         },
-        "scatter": _scatter(target[train], refs[train], model, explanation.diagnostics.get("lag_min", 0)),
+        "scatter": _scatter(target[train], refs[train], model, explanation.diagnostics),
         "engine": {"id": "py", "version": windgap.__version__, "ms": (time.perf_counter() - started) * 1000},
     }
 
 
-def _scatter(target: pd.Series, refs: pd.DataFrame, model, lag_min: float) -> dict:
-    """Training pairs as the model sees them: target(t) against the first reference at t − τ (τ = lag_min), evenly
+def _scatter(target: pd.Series, refs: pd.DataFrame, model, diagnostics: dict) -> dict:
+    """Training pairs as the model sees them: target(t) against the chosen reference (`reference_index`, else the only
+    one) at t − τ (τ = lag_min), evenly
     thinned to MAX_SCATTER. The fit line is the in-sample prediction averaged per 1 m/s bin of that shifted reference:
     exactly the model's line for a + b · v_r(t − τ), and still meaningful for models that depend on more."""
-    ref = refs.iloc[:, 0].shift(round(lag_min * 60 / STEP_S))
+    ref = refs.iloc[:, int(diagnostics.get("reference_index", 0))].shift(round(diagnostics.get("lag_min", 0) * 60 / STEP_S))
     pairs = pd.DataFrame({"ref": ref, "target": target}).dropna()
     k = min(len(pairs), MAX_SCATTER)
     shown = pairs.iloc[(np.arange(k) * len(pairs)) // k] if k else pairs

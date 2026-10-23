@@ -46,6 +46,39 @@ const KEYS: Record<string, { label: string; unit?: string; digits: number; hint:
 }
 
 const COMPARED = [METRICS.energy_wape_pct, METRICS.wind_rmse, METRICS.coverage_80]
+/** Diagnostics of the reference choice, shown in their own card. */
+const CHOICE = /^(reference_index|r_ref_\d+)$/
+
+/** Bonus 3: the model picks the reference that tracked the target best before the outage; this card shows why. */
+const ReferenceChoice = observer(function ReferenceChoice({ response }: { response: AnalyzeResponse }) {
+  const d = response.explanation.diagnostics
+  const ranked = store.references
+    .map((ref, i) => ({ id: ref.id, r: d[`r_ref_${i}`], used: i === d.reference_index }))
+    .sort((a, b) => (b.r ?? -1) - (a.r ?? -1))
+  const used = ranked.find((x) => x.used)!
+  return (
+    <Section
+      title="Reference farm"
+      description={`We use ${used.id} because it tracked the target best before the outage: r = ${fmtNum(used.r, 3)}. Each farm is tried at its best delay τ; the others are not used.`}
+      className="lg:col-span-12"
+    >
+      <ul className="flex flex-col gap-1.5 text-label">
+        {ranked.map(({ id, r, used }) => (
+          <li key={id} className="grid grid-cols-[minmax(0,12rem)_1fr_auto] items-center gap-3">
+            <span className={cn('truncate', used && 'font-medium')}>{id}</span>
+            <span className="h-2 rounded-full bg-muted">
+              <span className={cn('block h-full rounded-full', used ? 'bg-reference' : 'bg-reference/40')} style={{ width: `${Math.max(r ?? 0, 0) * 100}%` }} />
+            </span>
+            <span className="flex items-center gap-2 tabular-nums">
+              {r === undefined ? 'n/a' : `r = ${fmtNum(r, 3)}`}
+              {used && <Badge>Used</Badge>}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </Section>
+  )
+})
 
 export const MethodStep = observer(function MethodStep() {
   const { response, warnings } = store
@@ -60,6 +93,7 @@ export const MethodStep = observer(function MethodStep() {
       )}
       {response ? (
         <>
+          {response.explanation.diagnostics.reference_index !== undefined && <ReferenceChoice response={response} />}
           <Explanation response={response} />
           <ScatterCard response={response} />
         </>
@@ -144,7 +178,7 @@ function ModelRow({ info, selected, response, failure }: { info: ModelInfo; sele
 
 function Explanation({ response }: { response: AnalyzeResponse }) {
   const { formula, summary, params, diagnostics } = response.explanation
-  const rows = Object.entries({ ...params, ...diagnostics })
+  const rows = Object.entries({ ...params, ...diagnostics }).filter(([key]) => !CHOICE.test(key))
   return (
     <Section title={store.label(store.model)} className="lg:col-span-4">
       <Formula tex={formula} />

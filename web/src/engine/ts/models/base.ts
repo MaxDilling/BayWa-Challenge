@@ -1,5 +1,5 @@
 // windgap/models/base.py
-import { mean, STEP_H, sum, type Frame } from '../frame'
+import { correlation, mean, STEP_H, sum, type Frame } from '../frame'
 
 export const Z90 = 1.2815515655446004
 const N_BLOCKS = 5
@@ -123,4 +123,30 @@ export function gaussianPrediction(mean: Float64Array, std: Float64Array): Predi
     q50: floor((m) => m),
     q90: floor((m, s) => m + Z90 * s),
   }
+}
+
+/** The reference column and delay τ (|τ| ≤ lagMax steps) at which the target correlates best on the training data:
+ * [column, τ, r, best r of every column]. */
+export function pickReference(refs: Frame, y: Float64Array, lagMax: number): [number, number, number, number[]] {
+  let best: [number, number, number] = [0, 0, -Infinity]
+  const rs = refs.cols.map((x, col) => {
+    let [r, lag] = [-Infinity, 0]
+    for (let l = -lagMax; l <= lagMax; l++) {
+      const c = correlation(...laggedPairs(x, y, l))
+      if (c >= r) [r, lag] = [c, l]
+    }
+    if (r > best[2]) best = [col, lag, r]
+    return r
+  })
+  return [...best, rs]
+}
+
+/** Which reference the model uses and how well each tracked the target; only when there was a choice. */
+export const choiceDiagnostics = (col: number, rs: number[]): Record<string, number> =>
+  rs.length > 1 ? { reference_index: col, ...Object.fromEntries(rs.map((r, i) => [`r_ref_${i}`, r])) } : {}
+
+/** (x(t − lag), y(t)) over the steps where both exist on the grid. */
+export function laggedPairs(x: Float64Array, y: Float64Array, lag: number): [Float64Array, Float64Array] {
+  const n = x.length
+  return [x.slice(Math.max(0, -lag), n - Math.max(0, lag)), y.slice(Math.max(0, lag), n - Math.max(0, -lag))]
 }

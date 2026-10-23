@@ -8,7 +8,7 @@ Kontrakt S3 und Modellleiter M0–M7 stehen in `SPEC.md`. Hier steht nur, was be
 2. Hyperparameter sind Konstruktor-Argumente mit Standardwert (`__init__(self, lag_max_min: int = 60)`). Die Engine reicht `params` aus der Anfrage als Keyword-Argumente durch. Varianten (LR mit und ohne Lag) sind Parameter, keine zweite Datei.
 3. `fit` setzt `self.errors = calibrate(x, y, fit_line)` aus `base.py`: `fit_line(x, y)` passt den Mittelwert an und gibt `v ↦ v̂` zurück; `calibrate` misst damit σ und das Fehlergedächtnis auf ungesehenen Blöcken (S3). Kein eigenes σ.
 4. `predict` gibt `gaussian_prediction(mean, self.errors.sigma(mean), refs.index)` zurück, außer das Modell hat eine eigene Verteilung. Spalten `mean, std, q10, q50, q90`, Index = `refs.index`, alles ≥ 0.
-5. `explain()`: `summary` in zwei Sätzen ohne Fachjargon, `formula` in LaTeX, `params` = gelernte Koeffizienten, `diagnostics` = `r`, `lag_min`, `n_train`, `sigma_0`, `sigma_slope`, `error_memory_h`. Nur endliche Zahlen.
+5. `explain()`: `summary` in zwei Sätzen ohne Fachjargon, `formula` in LaTeX, `params` = gelernte Koeffizienten, `diagnostics` = `r`, `lag_min`, `n_train`, `sigma_0`, `sigma_slope`, `error_memory_h`, bei mehreren Referenzen `reference_index` und `r_ref_<i>`. Nur endliche Zahlen.
 6. `make fixtures && make test`, dann Harness laufen lassen. Ein Modell ist erst fertig, wenn es im Leaderboard steht.
 
 ## Regeln
@@ -19,4 +19,4 @@ Kontrakt S3 und Modellleiter M0–M7 stehen in `SPEC.md`. Hier steht nur, was be
 - σ kommt aus `calibrate` (Fehler auf ungesehenen Blöcken), nie aus der Anpassungsgüte. Ziel: `coverage_80` ≈ 0,8.
 - Schnell bleiben: `fit` läuft in der Harness tausendfach; numpy statt pandas in Schleifen (Harness < 30 s).
 - Nur numpy und pandas. scipy, statsmodels oder scikit-learn nur nach Rückfrage (Kaltstart in Pyodide). LightGBM und alles, was nur als Benchmark dient, gehört nach `harness/benchmarks/`, nie hierher.
-- Mehrere Referenzen: Das Modell nimmt die erste Spalte, bis M7 die Kombination regelt.
+- Mehrere Referenzen: `fit` wählt die Spalte mit `pick_reference` (base.py) und meldet die Wahl mit `choice_diagnostics`; `predict` liest nur diese Spalte.

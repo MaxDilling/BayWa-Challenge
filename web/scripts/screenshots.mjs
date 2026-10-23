@@ -1,5 +1,5 @@
 // Screenshots of every GUI step for review: desktop, mobile, dark, an upload error, all demo files dropped at once,
-// data that triggers plausibility warnings and the py engine.
+// data that triggers plausibility warnings, the method sheet and the py engine.
 // Usage (after make build): node web/scripts/screenshots.mjs [outDir]. Exits 1 on any console error.
 import { spawn } from 'node:child_process'
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
@@ -82,6 +82,9 @@ await warned.getByText('kWh lost').waitFor({ state: 'attached' })
 await shot(warned, 'warnings-1-upload.png')
 await warned.locator('nav[aria-label=Steps] button').nth(3).click()
 await shot(warned, 'warnings-4-results.png')
+await warned.setViewportSize({ ...DESKTOP, height: 1500 })
+await warned.getByRole('button', { name: 'How it works' }).click()
+await shot(warned, 'how-it-works.png')
 await warned.close()
 
 // A second reference that does not track the target (the demo reference backwards in time): the Method step ranks both.

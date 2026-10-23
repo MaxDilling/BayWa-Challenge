@@ -1,3 +1,4 @@
+import { fmtAmount, fmtNum } from '@/components/format'
 import { STEP_MS } from '@/engine/ts/frame'
 import type { Dataset } from './dataset'
 import type { Span } from './outage'
@@ -14,8 +15,6 @@ const MIN_TRAIN_STEPS = 5 * 144
 const MIN_RATED_KW = 100
 const MAX_RATED_KW = 20_000
 
-const fmt = (v: number, digits = 0) => v.toLocaleString('en-US', { maximumFractionDigits: digits })
-
 /** Data-quality checks the engine does not make. `r` is the model's correlation from the engine's diagnostics. */
 export function plausibility(dataset: Dataset, outage?: Span, r?: number): Warning[] {
   const { target, references, powerCurve } = dataset
@@ -27,7 +26,7 @@ export function plausibility(dataset: Dataset, outage?: Span, r?: number): Warni
     warnings.push({
       step: 'upload',
       title: 'Unusual rated power',
-      detail: `The curve peaks at ${fmt(rated)} kW per turbine; real turbines have ${fmt(MIN_RATED_KW)} kW to ${fmt(MAX_RATED_KW / 1000)} MW. Check the unit (kW, MW or W) and that the curve is for one turbine.`,
+      detail: `The curve peaks at ${fmtAmount(rated)} kW per turbine; real turbines have ${fmtNum(MIN_RATED_KW)} kW to ${fmtNum(MAX_RATED_KW / 1000)} MW. Check the unit (kW, MW or W) and that the curve is for one turbine.`,
     })
 
   for (const ref of references) {
@@ -43,7 +42,7 @@ export function plausibility(dataset: Dataset, outage?: Span, r?: number): Warni
   if (r !== undefined && r < MIN_CORRELATION)
     warnings.push({
       step: 'method',
-      title: `Low correlation r = ${fmt(r, 2)}`,
+      title: `Low correlation r = ${fmtNum(r, 2)}`,
       detail: `Target and reference agree less than usual for this method (r below ${MIN_CORRELATION}), so the prediction and its range are less reliable. A closer reference farm would help.`,
     })
 
@@ -55,7 +54,7 @@ export function plausibility(dataset: Dataset, outage?: Span, r?: number): Warni
   if (bridged)
     warnings.push({
       step: 'outage',
-      title: `${fmt(bridged)} reference value${bridged === 1 ? '' : 's'} bridged`,
+      title: `${fmtNum(bridged)} reference value${bridged === 1 ? '' : 's'} bridged`,
       detail: 'The reference misses these 10-minute values during the outage; they are interpolated linearly from their neighbours.',
     })
 
@@ -64,7 +63,7 @@ export function plausibility(dataset: Dataset, outage?: Span, r?: number): Warni
     warnings.push({
       step: 'outage',
       title: 'Little data before the outage',
-      detail: `The model learns from ${fmt(before / 144, 1)} days of target data before the outage; 5 days or more make the fit and the backtest reliable.`,
+      detail: `The model learns from ${fmtNum(before / 144, 1)} days of target data before the outage; 5 days or more make the fit and the backtest reliable.`,
     })
 
   const targetEnd = target.grid.t0 + target.grid.values.length * STEP_MS

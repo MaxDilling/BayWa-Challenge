@@ -1,5 +1,5 @@
 // Words for the engine's numbers: validation keys, the backtest verdict and the energy headline, shared by Method, Results and Export.
-import { fmtDuration, fmtNum, fmtPct } from '@/components/format'
+import { fmtAmount, fmtDuration, fmtNum, fmtPct } from '@/components/format'
 import type { Dataset } from '@/data'
 import type { AnalyzeResponse } from '@/engine'
 
@@ -27,7 +27,7 @@ export const METRICS: Record<string, MetricInfo> = {
   power_rmse: {
     key: 'power_rmse',
     label: 'Power RMSE',
-    format: (v) => `${fmtNum(v)} kW`,
+    format: (v) => `${fmtAmount(v)} kW`,
     hint: 'Typical error of the farm power per 10 minutes, after the power curve (root mean square).',
   },
   coverage_80: {
@@ -64,8 +64,11 @@ export const BAND_HINT =
 
 /** The farm the energy is for: "4 turbines × 3,000 kW". */
 export const farmText = ({ nTurbines, powerCurve }: Dataset) =>
-  `${fmtNum(nTurbines)} turbine${nTurbines === 1 ? '' : 's'} × ${fmtNum(Math.max(...powerCurve.powerKw))} kW`
+  `${fmtNum(nTurbines)} turbine${nTurbines === 1 ? '' : 's'} × ${fmtAmount(Math.max(...powerCurve.powerKw))} kW`
+
+/** "with 80 % probability between 13.1 and 20.9 kWh" */
+export const rangeText = ({ kwhP10, kwhP90 }: AnalyzeResponse['energy']) =>
+  `with 80 % probability between ${fmtAmount(kwhP10)} and ${fmtAmount(kwhP90)} kWh`
 
 /** The lost energy in one sentence for insurers. */
-export const headline = ({ kwhP10, kwhP50, kwhP90 }: AnalyzeResponse['energy']) =>
-  `Most likely ${fmtNum(kwhP50)} kWh; with 80 % probability between ${fmtNum(kwhP10)} and ${fmtNum(kwhP90)} kWh.`
+export const headline = (energy: AnalyzeResponse['energy']) => `Most likely ${fmtAmount(energy.kwhP50)} kWh; ${rangeText(energy)}.`

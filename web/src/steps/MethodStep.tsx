@@ -2,9 +2,10 @@ import { observer } from 'mobx-react-lite'
 import { useCallback } from 'react'
 import { AnalysisState } from '@/components/AnalysisState'
 import { Chart, type ChartTheme } from '@/components/charts/Chart'
-import { fmtDuration, fmtNum } from '@/components/format'
+import { fmtAmount, fmtDuration, fmtNum } from '@/components/format'
 import { Formula } from '@/components/Formula'
 import { Hint } from '@/components/Hint'
+import { BENCHMARK } from '@/components/HowItWorks'
 import { METRICS } from '@/components/metrics'
 import { Section } from '@/components/Section'
 import { Warnings } from '@/components/Warnings'
@@ -163,13 +164,13 @@ function ModelRow({ info, selected, response, failure }: { info: ModelInfo; sele
         </span>
         <span className="hidden pl-5 text-label text-muted-foreground sm:block">
           {info.tagline}
-          {info.recommended && ' Lowest error on our benchmark of 7 datasets.'}
+          {info.recommended && ` Best score on our benchmark of ${BENCHMARK.datasets} datasets (see How it works).`}
         </span>
       </td>
       {COMPARED.map((m) => cell(response ? (m.key in response.validation ? m.format(response.validation[m.key]) : 'n/a') : pending))}
       {cell(
         response
-          ? `${fmtNum(response.energy.kwhP50)} kWh (${fmtNum(response.energy.kwhP10)}–${fmtNum(response.energy.kwhP90)})`
+          ? `${fmtAmount(response.energy.kwhP50)} kWh (${fmtAmount(response.energy.kwhP10)}–${fmtAmount(response.energy.kwhP90)})`
           : pending,
       )}
     </tr>

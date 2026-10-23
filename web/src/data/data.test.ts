@@ -149,7 +149,7 @@ describe('plausibility', () => {
     expect(titles(dataset, outage, 0.5)).toEqual([
       'Unusual rated power',
       'Target and ref are identical',
-      'Low correlation r = 0.5',
+      'Low correlation r = 0.50',
       '1 reference value bridged',
       'Little data before the outage',
       'The outage runs to the end of the target data',

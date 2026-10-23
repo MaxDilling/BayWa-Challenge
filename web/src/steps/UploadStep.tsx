@@ -3,7 +3,7 @@ import { observer } from 'mobx-react-lite'
 import { useCallback, useState, type ReactNode } from 'react'
 import { Chart, type ChartTheme } from '@/components/charts/Chart'
 import { DropZone, FileDrop, FileError } from '@/components/DropZone'
-import { fmtDate, fmtDateTime, fmtNum, fmtPct, STEP_MS } from '@/components/format'
+import { fmtAmount, fmtDate, fmtDateTime, fmtNum, fmtPct, STEP_MS } from '@/components/format'
 import { Section } from '@/components/Section'
 import { Warnings } from '@/components/Warnings'
 import { Badge } from '@/components/ui/badge'
@@ -215,7 +215,7 @@ function SeriesReport({ series, correlation, onRemove }: { series: WindSeries; c
 function curveOption({ windMs, powerKw }: PowerCurve, t: ChartTheme) {
   return {
     grid: { top: t.label, left: t.label * 0.5 },
-    tooltip: { trigger: 'axis', valueFormatter: (v: number) => `${fmtNum(v)} kW` },
+    tooltip: { trigger: 'axis', valueFormatter: (v: number) => `${fmtAmount(v)} kW` },
     xAxis: { type: 'value', name: 'm/s', min: 0 },
     yAxis: { type: 'value', name: 'kW', splitNumber: 2 },
     series: [{ type: 'line', data: windMs.map((v, i) => [v, powerKw[i]]), lineStyle: { color: t.prediction, width: t.line } }],
@@ -232,7 +232,7 @@ const CurveReport = observer(function CurveReport({ curve }: { curve: PowerCurve
         title="Turbine power curve"
         rows={[
           ['Points', fmtNum(curve.windMs.length)],
-          ['Rated power', `${fmtNum(rated)} kW per turbine · ${fmtNum(rated * store.nTurbines)} kW farm`],
+          ['Rated power', `${fmtAmount(rated)} kW per turbine · ${fmtAmount(rated * store.nTurbines)} kW farm`],
           ['Producing', producing.length ? `${fmtNum(producing[0], 1)} to ${fmtNum(producing[producing.length - 1], 1)} m/s` : 'never'],
         ]}
       />
@@ -271,7 +271,7 @@ const TurbineDecision = observer(function TurbineDecision() {
         onBlur={() => setDraft(undefined)}
       />
       <span className="text-label tabular-nums">
-        × {fmtNum(rated)} kW = <span className="font-medium">{fmtNum(rated * nTurbines)} kW</span> rated farm power
+        × {fmtAmount(rated)} kW = <span className="font-medium">{fmtAmount(rated * nTurbines)} kW</span> rated farm power
       </span>
       {!turbinesConfirmed && (
         <span className="flex items-center gap-3 sm:ml-auto">

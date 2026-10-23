@@ -4,6 +4,7 @@ import { cn } from '@/lib/utils'
 
 interface Props {
   title: ReactNode
+  id?: string
   description?: ReactNode
   action?: ReactNode
   className?: string
@@ -11,9 +12,9 @@ interface Props {
 }
 
 /** A titled card: the building block of every step. */
-export function Section({ title, description, action, className, children }: Props) {
+export function Section({ id, title, description, action, className, children }: Props) {
   return (
-    <Card className={cn('shadow-card', className)}>
+    <Card id={id} className={cn('shadow-card', className)}>
       <CardHeader>
         <CardTitle>{title}</CardTitle>
         {description && <CardDescription className="text-label">{description}</CardDescription>}

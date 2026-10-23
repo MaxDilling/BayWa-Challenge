@@ -1,9 +1,11 @@
-import { Check, ChevronLeft, ChevronRight, Wind } from 'lucide-react'
+import { Check, ChevronLeft, ChevronRight, TriangleAlert, Wind } from 'lucide-react'
 import { observer } from 'mobx-react-lite'
 import type { ReactNode } from 'react'
 import { EngineBar } from '@/components/EngineBar'
-import { fmtDuration, fmtNum } from '@/components/format'
+import { HowItWorks } from '@/components/HowItWorks'
+import { fmtAmount, fmtDuration } from '@/components/format'
 import { Button } from '@/components/ui/button'
+import { checksText } from '@/components/Warnings'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
 import { STEPS, store, type Step } from '@/state/store'
@@ -50,12 +52,13 @@ function stepStatus(step: Step): string {
   if (step === 'method') return store.label(model)
   if (!store.turbinesConfirmed) return 'Confirm turbines'
   if (status === 'running') return 'Calculating…'
-  if (step === 'results') return response ? `${fmtNum(response.energy.kwhP50)} kWh lost` : status === 'error' ? 'Not available' : '—'
+  if (step === 'results') return response ? `${fmtAmount(response.energy.kwhP50)} kWh lost` : status === 'error' ? 'Not available' : '—'
   return response ? 'CSV · email' : '—'
 }
 
 const Stepper = observer(function Stepper() {
   const current = STEPS.indexOf(store.step)
+  const checks = store.response ? store.warnings.length : 0
   return (
     <nav aria-label="Steps" className="grid grid-cols-5 gap-2">
       {STEPS.map((step, i) => {
@@ -86,7 +89,12 @@ const Stepper = observer(function Stepper() {
               {i < current ? <Check className="size-4" /> : i + 1}
             </span>
             <span className="min-w-0">
-              <span className="block font-medium">{STEP_INFO[step].label}</span>
+              <span className="flex items-center gap-1.5 font-medium">
+                {STEP_INFO[step].label}
+                {step === 'results' && checks > 0 && (
+                  <TriangleAlert role="img" aria-label={checksText(checks)} className="size-3.5 text-warning" />
+                )}
+              </span>
               <span className="block truncate text-label text-muted-foreground tabular-nums">{stepStatus(step)}</span>
             </span>
           </button>
@@ -115,6 +123,7 @@ export default observer(function App() {
                 into kWh with the power curve.
               </p>
             </div>
+            <HowItWorks />
           </div>
         </header>
         <main className="mx-auto flex w-full max-w-page flex-1 flex-col gap-section px-section py-section">

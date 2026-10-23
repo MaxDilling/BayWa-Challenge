@@ -3,23 +3,29 @@ import { useCallback } from 'react'
 import { AnalysisState } from '@/components/AnalysisState'
 import { Chart, type ChartTheme } from '@/components/charts/Chart'
 import { byId, gridPoints, tooltipHtml } from '@/components/charts/series'
-import { fmtAxisTime, fmtDayTime, fmtDuration, fmtNum, fmtPct, fmtSpan, STEP_MS } from '@/components/format'
+import { fmtAmount, fmtAxisTime, fmtDayTime, fmtDuration, fmtNum, fmtPct, fmtSpan, STEP_MS } from '@/components/format'
 import { Hint } from '@/components/Hint'
-import { BAND_HINT, farmText, headline, METRICS, verdict } from '@/components/metrics'
+import { BAND_HINT, farmText, METRICS, rangeText, verdict } from '@/components/metrics'
 import { Notice } from '@/components/Notice'
 import { Section } from '@/components/Section'
-import { Warnings } from '@/components/Warnings'
+import { Warnings, WarningSummary } from '@/components/Warnings'
 import type { Dataset, Span } from '@/data'
 import type { AnalyzeResponse } from '@/engine'
 import { store } from '@/state/store'
 
 const HOUR = 3_600_000
+const CHECKS_ID = 'data-checks'
 
 export const ResultsStep = observer(function ResultsStep() {
   const { response, dataset, outage, warnings } = store
   if (!response || !dataset || !outage) return <AnalysisState />
   return (
     <div className="grid gap-section lg:grid-cols-12">
+      {warnings.length > 0 && (
+        <div className="lg:col-span-12">
+          <WarningSummary items={warnings} detailsId={CHECKS_ID} />
+        </div>
+      )}
       <EnergyCard response={response} outage={outage} dataset={dataset} />
       <AccuracyCard
         validation={response.validation}
@@ -29,7 +35,7 @@ export const ResultsStep = observer(function ResultsStep() {
       <WindCard dataset={dataset} response={response} outage={outage} />
       <EnergyCharts response={response} />
       {warnings.length > 0 && (
-        <Section title="Data checks" description="Worth a look before the numbers are sent; they also go into the email." className="lg:col-span-12">
+        <Section id={CHECKS_ID} title="Data checks" description="Worth a look before the numbers are sent; they also go into the email." className="lg:col-span-12">
           <Warnings items={warnings} />
         </Section>
       )}
@@ -46,30 +52,24 @@ function EnergyCard({ response, outage, dataset }: { response: AnalyzeResponse; 
       description={`${farmText(dataset)} · ${fmtDuration(outage.endMs - outage.startMs)} outage · ${fmtSpan(outage)}`}
       className="lg:col-span-4"
     >
-      <p className="text-pretty font-medium">
-        {headline(response.energy)}{' '}
-        <Hint label={<span className="sr-only">How the range is made</span>}>{BAND_HINT}</Hint>
-      </p>
       <p className="flex items-baseline gap-2">
-        <span className="text-kpi font-semibold tabular-nums">{fmtNum(kwhP50)}</span>
+        <span className="text-kpi font-semibold tabular-nums">{fmtAmount(kwhP50)}</span>
         <span className="text-stat text-muted-foreground">kWh</span>
       </p>
-      <p className="text-label text-muted-foreground">P50, the expected loss</p>
+      <p className="text-label text-muted-foreground">Most likely loss (P50)</p>
+      <p className="text-pretty font-medium">
+        The loss lies {rangeText(response.energy)}.{' '}
+        <Hint label={<span className="sr-only">How the range is made</span>}>{BAND_HINT}</Hint>
+      </p>
       <div className="relative mt-2 h-2 rounded-full bg-energy/25" aria-hidden>
         <span
           className="absolute top-1/2 size-3.5 -translate-1/2 rounded-full border-2 border-card bg-energy"
           style={{ left: `${position}%` }}
         />
       </div>
-      <div className="flex justify-between text-label tabular-nums">
-        <span>
-          <span className="block font-medium">{fmtNum(kwhP10)} kWh</span>
-          <span className="text-muted-foreground">P10 · 10 % quantile</span>
-        </span>
-        <span className="text-right">
-          <span className="block font-medium">{fmtNum(kwhP90)} kWh</span>
-          <span className="text-muted-foreground">P90 · 90 % quantile</span>
-        </span>
+      <div className="flex justify-between text-label text-muted-foreground">
+        <span>P10 · 10 % quantile</span>
+        <span>P90 · 90 % quantile</span>
       </div>
     </Section>
   )
@@ -224,7 +224,7 @@ function cumulativeOption(response: AnalyzeResponse, t: ChartTheme) {
       trigger: 'axis',
       formatter: (params: unknown) => {
         const [p] = params as { value: [number, number] }[]
-        return tooltipHtml(p.value[0], [{ color: t.energy, name: 'Lost so far (P50)', value: `${fmtNum(p.value[1])} kWh` }])
+        return tooltipHtml(p.value[0], [{ color: t.energy, name: 'Lost so far (P50)', value: `${fmtAmount(p.value[1])} kWh` }])
       },
     },
     grid: { top: t.label * 2 },
@@ -250,7 +250,7 @@ function hourlyOption(response: AnalyzeResponse, t: ChartTheme) {
       formatter: (params: unknown) => {
         const [p] = params as { dataIndex: number }[]
         const [hour, kwh] = hours[p.dataIndex]
-        return tooltipHtml(hour, [{ color: t.energy, name: 'Lost in this hour (P50)', value: `${fmtNum(kwh)} kWh` }])
+        return tooltipHtml(hour, [{ color: t.energy, name: 'Lost in this hour (P50)', value: `${fmtAmount(kwh)} kWh` }])
       },
     },
     grid: { top: t.label * 2 },

@@ -58,6 +58,9 @@ export function fmtDuration(ms: number) {
 
 export const fmtNum = (v: number, digits = 0) => v.toLocaleString('en-US', { minimumFractionDigits: digits, maximumFractionDigits: digits })
 
+/** Energy and power: whole numbers from 100 on, below that 3 significant digits, so a small farm never reads "0 kW". */
+export const fmtAmount = (v: number) => (Math.abs(v) >= 100 ? fmtNum(v) : v.toLocaleString('en-US', { maximumSignificantDigits: 3 }))
+
 export const fmtPct = (fraction: number, digits = 1) => `${fmtNum(100 * fraction, digits)} %`
 
 function berlinParts(ms: number) {

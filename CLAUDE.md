@@ -16,6 +16,7 @@ Sprache: Code, Bezeichner, Kommentare und Oberfläche auf **Englisch**; SPEC.md 
 make install     # uv sync + npm ci
 make test        # pytest + vitest (inkl. windgap in Pyodide gegen die Golden-Fixtures)
 make fixtures    # Golden-Fixtures neu schreiben (nach jeder Änderung an Modell, Energie, Metrik, engine.py)
+make demo        # data/synthetic/demo_*.csv neu schreiben (Demo-Daten der GUI)
 make dev         # Wheel bauen, Pyodide holen, Vite-Dev-Server
 make build       # dist/windgap.html (Einzeldatei, ts) + dist/windgap-web/ (beide Engines)
 make serve       # build + dist/windgap-web/ auf http://localhost:8000
@@ -60,13 +61,15 @@ harness (nativ) ──▶ windgap.backtest.fold ──▶ windgap.models.registr
 - **`windgap/models/`**: `base.py` (`WindModel`-Protocol, `Explanation`, `gaussian_prediction`), `registry.py` (`@register`; findet jedes Modul im Ordner automatisch), ein Modul je Modell. Regeln: `windgap/models/CLAUDE.md`.
 - **`windgap/backtest.py`**: `fold` (ein simulierter Ausfall) und `backtest` (die Validierungsmetriken der Engine). Die Harness-Szenarien bauen auf `fold` auf.
 - **`windgap/engine.py`**: `handle(json) -> json` und `list_models()`, Kontrakt S5. Erwartet vollständige Referenzen im Ausfall, weil Lücken beim Import gefüllt werden (ADR-5).
-- **`harness/`**: nur nativ, nicht im Wheel. `synthetic.py` (Paare mit bekannter Wahrheit, generische Leistungskurve), `fixtures.py` (schreibt die Golden-Fixtures). Regeln: `harness/CLAUDE.md`.
+- **`harness/`**: nur nativ, nicht im Wheel. `synthetic.py` (Paare mit bekannter Wahrheit, generische Leistungskurve), `fixtures.py` (schreibt die Golden-Fixtures), `demo.py` (schreibt die Demo-CSVs im Challenge-Format). Regeln: `harness/CLAUDE.md`.
 - **`web/`**: Vite, React, TypeScript, shadcn/ui, Tailwind, ECharts, MobX State Tree. Regeln: `web/CLAUDE.md`.
   - `src/engine/contract.ts`: S5 auf TS-Seite. `src/engine/index.ts`: `createEngine(id?, onProgress?)` → `{ engine, fallback? }`, Auswahl über `?engine=`, `py` wird einmal geladen und gecacht, scheitert es, übernimmt `ts` und `fallback` nennt den Grund.
   - `src/engine/py/`: `worker.ts` lädt Pyodide aus `public/pyodide/`, numpy und pandas, entpackt `public/py/windgap.whl` und ruft `handle`/`list_models`; `pyEngine.ts` ist der Promise-Wrapper um den Worker.
-  - `src/engine/fixture.ts`: Platzhalter der `ts`-Engine, antwortet mit dem Golden-Fixture, bis der TS-Port `identity` kann; dann löschen.
+  - `src/engine/ts/`: Port von `windgap`, eine Datei je Python-Modul (`frame.ts` ↔ grid/schema, `energy.ts`, `metrics.ts`, `backtest.ts`, `models/`, `tsEngine.ts` ↔ engine.py). Modelle nur, wenn sie in `models/registry.ts` eingetragen sind; jedes braucht Golden-Fixtures.
+  - `src/data/`: CSV-Import (T1, TS): `csv.ts` (Trennzeichen, Dezimalkomma, Datumsformate, Fehlwert-Tokens), `berlin.ts` (EU-Sommerzeitregel; doppelte Stunde nach Reihenfolge), `wind.ts`, `powerCurve.ts`, `outage.ts` (Ausfälle ≥ 3 Schritte, sonst Messlücken), `dataset.ts` (`buildDataset`, `toRequest` mit Überbrückung kurzer Referenzlücken im Ausfall), `demo.ts` (lädt `data/synthetic/demo_*.csv` über denselben Weg). Fehler sind `ImportError` mit Zeilennummer.
   - `scripts/fetch-pyodide.mjs`: kopiert Pyodide aus `node_modules` und lädt die Wheels von numpy und pandas samt Abhängigkeiten (sha256 gegen die Lock-Datei) nach `public/pyodide/`. `PACKAGES` dort = Abhängigkeiten von `windgap`.
-- **`fixtures/`**: eingecheckt, von Python erzeugt, von beiden Seiten gelesen.
+- **`.github/workflows/pages.yml`**: bei Push auf `main` `make install test build`, dann `dist/windgap-web/` auf GitHub Pages.
+- **`fixtures/`**: eingecheckt. `golden/` von Python erzeugt; `csv/` sind Import-Fälle, deren erwartete Raster unabhängig mit pandas (`tz_localize(..., ambiguous="infer")`) berechnet wurden. Der spätere Python-Import muss dieselben Fälle bestehen.
 - **`data/challenge/`** ist nicht eingecheckt, solange nicht geklärt ist, ob die Challenge-Daten öffentlich sein dürfen.
 
 ## Arbeiten im Team

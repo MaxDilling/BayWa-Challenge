@@ -1,0 +1,38 @@
+{
+ "grid": {
+  "t0": 1792878600000,
+  "stepS": 600,
+  "values": [
+   4.5,
+   4.6,
+   null,
+   4.8,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   5.0,
+   5.1,
+   5.2,
+   null
+  ]
+ },
+ "report": {
+  "rows": 7,
+  "negative": 0,
+  "ignoredColumns": [
+   "Temperatur"
+  ],
+  "measured": 6,
+  "missing": 15
+ }
+}

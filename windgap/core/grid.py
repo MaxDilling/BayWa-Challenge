@@ -9,6 +9,8 @@ from windgap.core.schema import STEP, STEP_S
 def grid_to_series(grid: dict, name: str | None = None) -> pd.Series:
     if grid["stepS"] != STEP_S:
         raise ValueError(f"stepS must be {STEP_S}, got {grid['stepS']}")
+    if grid["t0"] % (STEP_S * 1000):
+        raise ValueError(f"t0 {grid['t0']} is not on the 10-minute grid")
     values = np.array([np.nan if v is None else v for v in grid["values"]], dtype=float)
     index = pd.date_range(pd.Timestamp(grid["t0"], unit="ms", tz="UTC"), periods=len(values), freq=STEP)
     return pd.Series(values, index=index, name=name)

@@ -66,7 +66,7 @@ Drei Kontrakte entkoppeln das Team: das interne Datenformat (T1), das Modell-Int
 
 ### S1 Eingabedateien
 
-- **Winddaten:** CSV mit Zeitstempel (Europe/Berlin) und Windgeschwindigkeit (m/s). Parser erkennt Trennzeichen (`,` oder `;`), Dezimalkomma, Spaltennamen und Datumsformat automatisch. Doppelte Stunde bei Zeitumstellung: Reihenfolge entscheidet (erste = Sommerzeit).
+- **Winddaten:** CSV mit Zeitstempel (Europe/Berlin) und Windgeschwindigkeit (m/s). Parser erkennt Trennzeichen (`,` oder `;`), Dezimalkomma, Spaltennamen und Datumsformat automatisch. Doppelte Stunde bei Zeitumstellung: Reihenfolge entscheidet (erste = Sommerzeit); Zeiten in der übersprungenen Frühlingsstunde sind ein Fehler. Zeitstempel mit Offset (`Z`, `+02:00`) gelten wie angegeben. Fehlwerte: leer, `NaN`, `NA`, `null`, `-`; negative Werte (z. B. `-999`) gelten als fehlend und werden gezählt. Referenzlücken im Ausfall bis 6 Schritte (1 h) überbrückt der Import linear, längere sind ein Fehler.
 - **Leistungskurve:** CSV mit `wind_speed_ms` und `power_kw`. Lineare Interpolation, 0 kW unterhalb des ersten und oberhalb des letzten Punkts (Abschaltgeschwindigkeit). Optional `n_turbines` je Park. **\[offen\]** Format der echten Kurven.
 
 ### S2 Internes Datenformat (T1)
@@ -320,7 +320,7 @@ windgap/                    Python-Kern, Pyodide-kompatibel, einziger Inhalt des
   models/    CLAUDE.md  base.py  registry.py  identity.py  (linear.py  variance_ratio.py ...)
   backtest.py               fold() + backtest(), gemeinsam für Engine-Validierung und Harness
   engine.py                 handle(request_json) -> response_json, list_models()
-harness/                    nur nativ: CLAUDE.md  synthetic.py  fixtures.py  (scenarios.py  run.py  dwd.py  benchmarks/)
+harness/                    nur nativ: CLAUDE.md  synthetic.py  fixtures.py  demo.py  (scenarios.py  run.py  dwd.py  benchmarks/)
 tests/                      pytest
 fixtures/
   golden/<modell>/<fall>.json   AnalyzeRequest + Antwort von windgap, Spezifikation der ts-Engine
@@ -330,8 +330,9 @@ data/        synthetic/  dwd/  challenge/ (nicht eingecheckt, bis geklärt ist, 
 notebooks/   diagnose.ipynb
 runs/        Harness-Ergebnisse, nicht eingecheckt
 web/                        Vite + React + shadcn (Nova/Radix) + Tailwind v4 + ECharts + MST, CLAUDE.md
-  src/engine/  contract.ts (S5)  golden.test.ts  (index.ts  py/  ts/)
-  src/data/    CSV-Import, Raster, Ausfallerkennung (TS)
+  src/engine/  contract.ts (S5)  index.ts (createEngine)  py/ (Worker)  ts/ (Port)
+  src/data/    CSV-Import, Zeitumstellung, Ausfallerkennung, Request-Bau, Demo-Daten (TS)
+  scripts/     fetch-pyodide.mjs
   src/state/   MST-Stores
   src/steps/   Upload, Outage, Method, Results, Export
   src/components/  charts/ (ECharts-Wrapper)  ui/ (shadcn)
@@ -346,10 +347,11 @@ In Klammern: geplant, noch nicht angelegt. Leere Platzhalterdateien gibt es nich
 
 - [x] PM: Repo, `uv`-Projekt, Makefile (`make dev`, `make test`, `make build`), `SPEC.md` + `CLAUDE.md` aus diesem Dokument
 - [x] PM: Engine-Interface und Typen (S5) in TS und Python, `identity` in Python, Golden-Fixtures
-- [ ] PM: `ts`-Engine mit Dummy-Modell `identity`, Golden-Test gegen `fixtures/golden/`
+- [x] PM: `ts`-Engine mit Dummy-Modell `identity`, Golden-Test gegen `fixtures/golden/` (trifft auf 1e-12)
 - [x] PM: **Durchstich Python im Browser:** Pyodide im Worker, `windgap` als Wheel laden, `identity` auf Demo-Daten. Gemessen (headless Chromium, lokal): Kaltstart 3,3–3,4 s, `analyze` 40–80 ms; Ergebnis gleich dem nativen bis 1e-12 (vitest). Rückfall auf `ts` getestet bei fehlendem Pyodide und fehlendem Wheel. Diagramm folgt mit der GUI
 - [ ] PM: GUI-Gerüst mit fünf Schritten, Engine-Schalter und automatischem Rückfall
-- [ ] PM: CSV-Import (TS) mit Zeitumstellung und Ausfallerkennung, mit Tests
+- [x] PM: CSV-Import (TS) mit Zeitumstellung und Ausfallerkennung, mit Tests gegen `fixtures/csv/`; Demo-Daten `data/synthetic/` (`make demo`)
+- [ ] Python-Import `windgap/core/io.py` für die Harness, besteht dieselben `fixtures/csv/`
 - [ ] PM: Build beider Varianten, GitHub-Pages-Deploy per GitHub Action
 - [ ] Mathe A: MCP-Grundlagen lesen (LR vs. VR), M0–M2 gegen das Interface S3, Erklärtexte, Fixture je Modell
 - [x] Synthetik-Generator (`harness/synthetic.py`), Metriken (`windgap/core/metrics.py`), Backtest-Fold (`windgap/backtest.py`)

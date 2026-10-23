@@ -1,12 +1,11 @@
 import type { Engine, EngineId } from './contract'
-import { fixtureEngine } from './fixture'
+import { tsEngine } from './ts/tsEngine'
 
 export type * from './contract'
-export { demoCase } from './fixture'
 
 export interface EngineHandle {
   engine: Engine
-  /** Set when the requested engine failed to start and the ts engine took over (ADR-4). */
+  /** Set when the py engine failed to start and the ts engine took over (ADR-4). */
   fallback?: string
 }
 
@@ -31,10 +30,10 @@ export async function createEngine(
       })
       return { engine: await py }
     } catch (e) {
-      await fixtureEngine.init(onProgress)
-      return { engine: fixtureEngine, fallback: `Python engine unavailable: ${e instanceof Error ? e.message : e}` }
+      await tsEngine.init(onProgress)
+      return { engine: tsEngine, fallback: `Python engine unavailable: ${e instanceof Error ? e.message : e}` }
     }
   }
-  await fixtureEngine.init(onProgress)
-  return { engine: fixtureEngine }
+  await tsEngine.init(onProgress)
+  return { engine: tsEngine }
 }

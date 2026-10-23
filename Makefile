@@ -1,4 +1,4 @@
-.PHONY: install dev test fixtures wheel pyodide build serve
+.PHONY: install dev test fixtures demo wheel pyodide build serve
 
 install:
 	uv sync
@@ -16,6 +16,10 @@ fixtures:
 	uv run python -m harness.fixtures
 
 # Stable file name: the py worker loads py/windgap.whl.
+# data/synthetic/demo_*.csv behind "Load demo data"
+demo:
+	uv run python -m harness.demo
+
 wheel:
 	rm -rf web/public/py
 	uv build --wheel --out-dir web/public/py

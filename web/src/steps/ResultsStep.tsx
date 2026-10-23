@@ -5,7 +5,7 @@ import { Chart, type ChartTheme } from '@/components/charts/Chart'
 import { byId, gridPoints, tooltipHtml } from '@/components/charts/series'
 import { fmtAxisTime, fmtDayTime, fmtDuration, fmtNum, fmtPct, fmtSpan, STEP_MS } from '@/components/format'
 import { Hint } from '@/components/Hint'
-import { BAND_HINT, headline, METRICS, verdict } from '@/components/metrics'
+import { BAND_HINT, farmText, headline, METRICS, verdict } from '@/components/metrics'
 import { Notice } from '@/components/Notice'
 import { Section } from '@/components/Section'
 import { Warnings } from '@/components/Warnings'
@@ -20,7 +20,7 @@ export const ResultsStep = observer(function ResultsStep() {
   if (!response || !dataset || !outage) return <AnalysisState />
   return (
     <div className="grid gap-section lg:grid-cols-12">
-      <EnergyCard response={response} outage={outage} />
+      <EnergyCard response={response} outage={outage} dataset={dataset} />
       <AccuracyCard
         validation={response.validation}
         outage={outage}
@@ -37,13 +37,13 @@ export const ResultsStep = observer(function ResultsStep() {
   )
 })
 
-function EnergyCard({ response, outage }: { response: AnalyzeResponse; outage: Span }) {
+function EnergyCard({ response, outage, dataset }: { response: AnalyzeResponse; outage: Span; dataset: Dataset }) {
   const { kwhP10, kwhP50, kwhP90 } = response.energy
   const position = kwhP90 > kwhP10 ? (100 * (kwhP50 - kwhP10)) / (kwhP90 - kwhP10) : 50
   return (
     <Section
       title="Lost energy"
-      description={`${fmtDuration(outage.endMs - outage.startMs)} outage · ${fmtSpan(outage)}`}
+      description={`${farmText(dataset)} · ${fmtDuration(outage.endMs - outage.startMs)} outage · ${fmtSpan(outage)}`}
       className="lg:col-span-4"
     >
       <p className="text-pretty font-medium">

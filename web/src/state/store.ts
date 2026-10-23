@@ -6,10 +6,11 @@ import { createEngine, requestedEngine, type AnalyzeResponse, type EngineHandle,
 export const STEPS = ['upload', 'outage', 'method', 'results', 'export'] as const
 export type Step = (typeof STEPS)[number]
 
-type Inputs = { target?: WindSeries; references?: WindSeries[]; powerCurve?: PowerCurve; nTurbines?: number }
+type Inputs = { target?: WindSeries; references?: WindSeries[] }
 
-/** Python errors arrive as a traceback; the last line is the message for people. */
-const message = (e: unknown) => (e instanceof Error ? e.message : String(e)).trim().split('\n').pop()!
+/** Python errors arrive as a traceback; the last line without the exception type is the message for people. */
+const message = (e: unknown) =>
+  (e instanceof Error ? e.message : String(e)).trim().split('\n').pop()!.replace(/^\w+Error: /, '')
 
 export const RootStore = types
   .model('RootStore', {
@@ -17,6 +18,8 @@ export const RootStore = types
     references: types.frozen<WindSeries[]>([]),
     powerCurve: types.frozen<PowerCurve | undefined>(),
     nTurbines: 1,
+    /** False after a power curve came from files: the turbine count is a decision the user must make. */
+    turbinesConfirmed: true,
     outage: types.frozen<Span | undefined>(),
     /** Empty until the engine lists its models; then the recommended one. */
     model: '',
@@ -32,6 +35,8 @@ export const RootStore = types
     models: [] as ModelInfo[],
     /** The last drop on the "all files" zone, kept to show and correct the assignment. */
     assignment: undefined as Assignment | undefined,
+    /** Where the proposed turbine count was read, e.g. the power curve's file name. */
+    turbinesSource: undefined as string | undefined,
   }))
   .views((self) => ({
     get dataset(): Dataset | undefined {
@@ -52,7 +57,7 @@ export const RootStore = types
     get status(): 'idle' | 'running' | 'error' {
       if (self.response) return 'idle'
       if (self.error !== undefined) return 'error'
-      return self.dataset && self.outage && self.engine ? 'running' : 'idle'
+      return self.dataset && self.outage && self.engine && self.turbinesConfirmed ? 'running' : 'idle'
     },
     get warnings() {
       return self.dataset ? plausibility(self.dataset, self.outage, self.response?.explanation.diagnostics.r) : []
@@ -63,13 +68,24 @@ export const RootStore = types
       self.step = step
     },
     setInputs(inputs: Inputs) {
-      const reset = inputs.target !== undefined || inputs.references !== undefined
       Object.assign(self, inputs)
-      if (reset) self.outage = self.dataset?.outages[0]
+      self.outage = self.dataset?.outages[0]
+    },
+    /** A new power curve from files; `turbines` is a count the file states, proposed but not confirmed. */
+    setPowerCurve(powerCurve: PowerCurve, turbines?: number, source?: string) {
+      self.powerCurve = powerCurve
+      if (turbines) self.nTurbines = turbines
+      self.turbinesSource = turbines ? source : undefined
+      self.turbinesConfirmed = false
+    },
+    setTurbines(n: number) {
+      self.nTurbines = n
+      self.turbinesConfirmed = true
     },
     loadDataset({ target, references, powerCurve, nTurbines }: Dataset) {
-      Object.assign(self, { target, references, powerCurve, nTurbines })
+      Object.assign(self, { target, references, powerCurve, nTurbines, turbinesConfirmed: true })
       self.assignment = undefined
+      self.turbinesSource = undefined
       self.outage = self.dataset?.outages[0]
     },
     setOutage(outage: Span) {
@@ -93,7 +109,7 @@ export const RootStore = types
     /** Files dropped together: take the power curve, and the target when exactly one series has an outage. */
     assign(assignment: Assignment) {
       self.assignment = assignment
-      if (assignment.powerCurve) self.setInputs({ powerCurve: assignment.powerCurve })
+      if (assignment.powerCurve) self.setPowerCurve(assignment.powerCurve, assignment.turbines, assignment.powerCurveFile)
       if (assignment.targetCandidates.length === 1) self.chooseTarget(assignment.targetCandidates[0])
     },
   }))
@@ -114,10 +130,10 @@ export const RootStore = types
       }),
       /** All models on the current data, the selected one first; a model change then only switches the view. */
       runAnalysis: flow(function* () {
-        const { dataset, outage, engine, models, model } = self
+        const { dataset, outage, engine, models, model, turbinesConfirmed } = self
         self.results = {}
         self.failures = {}
-        if (!dataset || !outage || !engine) return
+        if (!dataset || !outage || !engine || !turbinesConfirmed) return
         const current = ++run
         for (const name of [model, ...models.map((m) => m.name).filter((m) => m !== model)]) {
           try {
@@ -137,7 +153,7 @@ export const RootStore = types
       addDisposer(
         self,
         reaction(
-          () => [self.dataset, self.outage, self.engine],
+          () => [self.dataset, self.outage, self.engine, self.turbinesConfirmed],
           () => self.runAnalysis(),
         ),
       )

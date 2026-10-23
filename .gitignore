@@ -12,3 +12,4 @@ web/dist/
 web/public/pyodide/
 web/public/py/
 .DS_Store
+predictions.csv

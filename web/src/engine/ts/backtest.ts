@@ -5,7 +5,7 @@ import { evaluate, summarize } from './metrics'
 import type { Prediction, WindModel } from './models/base'
 import { create } from './models/registry'
 
-const MIN_TRAIN_STEPS = 144
+export const MIN_TRAIN_STEPS = 144
 const CONTEXT_STEPS = 36
 
 /** Prediction for rows [start, end) from the window plus up to CONTEXT_STEPS complete reference rows on either side. */

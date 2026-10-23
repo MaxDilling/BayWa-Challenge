@@ -48,6 +48,7 @@ function stepStatus(step: Step): string {
   if (!dataset) return '—'
   if (step === 'outage') return outage ? fmtDuration(outage.endMs - outage.startMs) : 'Select a period'
   if (step === 'method') return store.label(model)
+  if (!store.turbinesConfirmed) return 'Confirm turbines'
   if (status === 'running') return 'Calculating…'
   if (step === 'results') return response ? `${fmtNum(response.energy.kwhP50)} kWh lost` : status === 'error' ? 'Not available' : '—'
   return response ? 'CSV · email' : '—'

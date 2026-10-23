@@ -10,6 +10,14 @@ const COEFFICIENT = /coeff|\bc[pt]\b|thrust|schub/i
 /** Per-turbine power curve (SPEC.md S1): wind speed (m/s) and power (kW, or MW when the header says so). */
 export const parsePowerCurveCsv = (text: string) => powerCurve(readTable(text))
 
+const TURBINES = [/(?<!\d)(\d{1,3})\s*[x×]\s*[\w.,-]*?(?:mw|kw)\b/i, /(?<!\d)(\d{1,3})[\s_-]*(?:turbines|wtgs|wea|anlagen)\b/i, /\b(?:turbines|n_turbines|number of turbines)\s*[:=]\s*(\d{1,3})\b/i]
+
+/** A turbine count the file name or the first lines state ("4x3MW", "4 turbines", "Turbines: 4"); the GUI still asks. */
+export function turbineCount(name: string, text: string): number | undefined {
+  const head = [name, ...text.split(/\r?\n/, 5)].join('\n')
+  return TURBINES.map((re) => Number(re.exec(head)?.[1])).find((n) => n >= 1)
+}
+
 export function powerCurve({ header, rows }: Table): PowerCurve {
   const columns = rows[0].cells.map((_, i) => i)
   const windCol = columns.find((i) => header && WIND.test(header[i])) ?? 0

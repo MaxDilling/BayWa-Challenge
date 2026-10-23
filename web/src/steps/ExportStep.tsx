@@ -3,10 +3,10 @@ import { observer } from 'mobx-react-lite'
 import { useState } from 'react'
 import { AnalysisState } from '@/components/AnalysisState'
 import { fmtDateTime, fmtDuration, fmtNum, fmtPct, isoBerlin, STEP_MS, toLocalInput } from '@/components/format'
-import { BAND_HINT, headline } from '@/components/metrics'
+import { BAND_HINT, farmText, headline } from '@/components/metrics'
 import { Section } from '@/components/Section'
 import { Button } from '@/components/ui/button'
-import type { Dataset, Span, Warning } from '@/data'
+import { FILLED_HEADER, filledTargetCsv, type Dataset, type Span, type Warning } from '@/data'
 import type { AnalyzeResponse } from '@/engine'
 import { store } from '@/state/store'
 
@@ -50,7 +50,7 @@ function emailDraft(dataset: Dataset, outage: Span, model: string, response: Ana
   const subject = `Energy loss estimate for wind farm ${target}, outage from ${fmtDateTime(outage.startMs)}`
   const body = [
     'Dear Sir or Madam,',
-    `we report an outage of wind farm ${target} (${fmtNum(dataset.nTurbines)} turbines) from ${fmtDateTime(outage.startMs)} to ${fmtDateTime(outage.endMs)} (Europe/Berlin), ${fmtDuration(outage.endMs - outage.startMs)} in total.`,
+    `we report an outage of wind farm ${target} (${farmText(dataset)}) from ${fmtDateTime(outage.startMs)} to ${fmtDateTime(outage.endMs)} (Europe/Berlin), ${fmtDuration(outage.endMs - outage.startMs)} in total.`,
     `Estimated lost energy: ${headline(response.energy).replace('Most', 'most')} The range is the 10 % to 90 % quantile (P10 to P90). ${BAND_HINT}`,
     `Method: the missing 10-minute wind speeds were predicted from the neighbouring reference farm ${dataset.references.map((r) => r.id).join(', ')}, using the relationship learned from the ${fmtNum((outage.startMs - dataset.target.grid.t0) / 86_400_000)} days of data before the outage (${model}). The predicted wind was converted to energy with the turbine power curve, taking the uncertainty of each prediction into account.`,
     v.n_folds && accuracy.length
@@ -76,8 +76,10 @@ export const ExportStep = observer(function ExportStep() {
   const { subject, body } = emailDraft(dataset, outage, store.label(model), response, warnings)
   return (
     <div className="grid gap-section lg:grid-cols-2">
+      <FilledCard dataset={dataset} response={response} />
+      <EmailCard subject={subject} body={body} />
       <Section
-        title="Prediction as CSV"
+        title="Prediction with uncertainty and energy"
         description={`${fmtNum(rows.length)} rows of 10 minutes: wind in m/s (mean, 10 % and 90 % quantile), expected farm power in kW, energy in kWh.`}
         action={
           <Button onClick={() => download(file, csv)}>
@@ -85,38 +87,68 @@ export const ExportStep = observer(function ExportStep() {
           </Button>
         }
       >
-        <div className="overflow-x-auto rounded-lg border">
-          <table className="w-full text-label tabular-nums">
-            <thead className="bg-muted text-muted-foreground">
-              <tr>
-                {COLUMNS.map((c) => (
-                  <th key={c} className="px-2 py-1.5 text-left font-medium whitespace-nowrap">
-                    {c}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {rows.slice(0, 6).map((r) => (
-                <tr key={r[0]} className="border-t">
-                  {r.map((cell, i) => (
-                    <td key={i} className="px-2 py-1 whitespace-nowrap">
-                      {cell}
-                    </td>
-                  ))}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <Table columns={COLUMNS} rows={rows.slice(0, 6)} />
         <p className="text-label text-muted-foreground">
           {file} · first 6 of {fmtNum(rows.length)} rows
         </p>
       </Section>
-      <EmailCard subject={subject} body={body} />
     </div>
   )
 })
+
+function Table({ columns, rows }: { columns: string[]; rows: string[][] }) {
+  return (
+    <div className="overflow-x-auto rounded-lg border">
+      <table className="w-full text-label tabular-nums">
+        <thead className="bg-muted text-muted-foreground">
+          <tr>
+            {columns.map((c) => (
+              <th key={c} className="px-2 py-1.5 text-left font-medium whitespace-nowrap">
+                {c}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r) => (
+            <tr key={r[0]} className="border-t">
+              {r.map((cell, i) => (
+                <td key={i} className="px-2 py-1 whitespace-nowrap">
+                  {cell}
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+/** The target file with the gaps of the outage filled: what a test that hides measurements compares against. */
+function FilledCard({ dataset, response }: { dataset: Dataset; response: AnalyzeResponse }) {
+  const csv = filledTargetCsv(dataset.target.grid, [response.prediction])
+  const lines = csv.trimEnd().split('\n')
+  const first = lines.findIndex((l) => l.endsWith(',1'))
+  const filled = lines.filter((l) => l.endsWith(',1')).length
+  const file = `${dataset.target.id}_filled.csv`
+  return (
+    <Section
+      title="Filled target series"
+      description={`The target file in the challenge format (Europe/Berlin time, m/s) with the predicted mean in its ${fmtNum(filled)} missing outage values; Predicted = 1 marks them. Use this file to submit predictions.`}
+      action={
+        <Button onClick={() => download(file, csv)}>
+          <Download /> Download filled series
+        </Button>
+      }
+    >
+      <Table columns={FILLED_HEADER.split(',')} rows={lines.slice(Math.max(first - 2, 1), first + 4).map((l) => l.split(','))} />
+      <p className="text-label text-muted-foreground">
+        {file} · {fmtNum(lines.length - 1)} rows, shown around the start of the outage
+      </p>
+    </Section>
+  )
+}
 
 function EmailCard({ subject, body }: { subject: string; body: string }) {
   const [copied, setCopied] = useState(false)
@@ -128,6 +160,7 @@ function EmailCard({ subject, body }: { subject: string; body: string }) {
   return (
     <Section
       title="Email to the insurer"
+      className="lg:row-span-2"
       description="A draft with period, method, lost energy, accuracy and data checks. Attach the CSV."
       action={
         <div className="flex gap-2">

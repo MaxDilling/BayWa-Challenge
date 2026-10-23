@@ -1,0 +1,386 @@
+{
+ "detect": [
+  {
+   "name": "outages of 30 min or more, shorter gaps, runs without reference data ignored",
+   "target": {
+    "t0": 1790812800000,
+    "stepS": 600,
+    "values": [
+     1,
+     null,
+     1,
+     null,
+     null,
+     null,
+     1,
+     null,
+     null,
+     null,
+     null,
+     1
+    ]
+   },
+   "references": [
+    {
+     "t0": 1790812800000,
+     "stepS": 600,
+     "values": [
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      null,
+      null,
+      null,
+      null,
+      1
+     ]
+    }
+   ],
+   "outages": [
+    {
+     "startMs": 1790814600000,
+     "endMs": 1790816400000
+    }
+   ],
+   "gaps": [
+    {
+     "startMs": 1790813400000,
+     "endMs": 1790814000000
+    }
+   ]
+  },
+  {
+   "name": "outage running to the end of the reference data",
+   "target": {
+    "t0": 1790812800000,
+    "stepS": 600,
+    "values": [
+     1,
+     1
+    ]
+   },
+   "references": [
+    {
+     "t0": 1790812800000,
+     "stepS": 600,
+     "values": [
+      1,
+      1,
+      1,
+      1,
+      1
+     ]
+    }
+   ],
+   "outages": [
+    {
+     "startMs": 1790814000000,
+     "endMs": 1790815800000
+    }
+   ],
+   "gaps": []
+  },
+  {
+   "name": "outage before the target file starts",
+   "target": {
+    "t0": 1790814600000,
+    "stepS": 600,
+    "values": [
+     1,
+     1
+    ]
+   },
+   "references": [
+    {
+     "t0": 1790812800000,
+     "stepS": 600,
+     "values": [
+      1,
+      1,
+      1,
+      1,
+      1
+     ]
+    }
+   ],
+   "outages": [
+    {
+     "startMs": 1790812800000,
+     "endMs": 1790814600000
+    }
+   ],
+   "gaps": []
+  },
+  {
+   "name": "longest first",
+   "target": {
+    "t0": 1790812800000,
+    "stepS": 600,
+    "values": [
+     1,
+     null,
+     null,
+     null,
+     1,
+     null,
+     null,
+     null,
+     null,
+     1
+    ]
+   },
+   "references": [
+    {
+     "t0": 1790812800000,
+     "stepS": 600,
+     "values": [
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1
+     ]
+    }
+   ],
+   "outages": [
+    {
+     "startMs": 1790815800000,
+     "endMs": 1790818200000
+    },
+    {
+     "startMs": 1790813400000,
+     "endMs": 1790815200000
+    }
+   ],
+   "gaps": []
+  },
+  {
+   "name": "an outage before the first target value comes last",
+   "target": {
+    "t0": 1790815800000,
+    "stepS": 600,
+    "values": [
+     1,
+     null,
+     null,
+     null,
+     1
+    ]
+   },
+   "references": [
+    {
+     "t0": 1790812800000,
+     "stepS": 600,
+     "values": [
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1
+     ]
+    }
+   ],
+   "outages": [
+    {
+     "startMs": 1790816400000,
+     "endMs": 1790818200000
+    },
+    {
+     "startMs": 1790812800000,
+     "endMs": 1790815800000
+    }
+   ],
+   "gaps": []
+  },
+  {
+   "name": "any reference measuring is enough",
+   "target": {
+    "t0": 1790812800000,
+    "stepS": 600,
+    "values": [
+     1,
+     null,
+     null,
+     null,
+     1
+    ]
+   },
+   "references": [
+    {
+     "t0": 1790812800000,
+     "stepS": 600,
+     "values": [
+      1,
+      null,
+      null,
+      null,
+      1
+     ]
+    },
+    {
+     "t0": 1790812800000,
+     "stepS": 600,
+     "values": [
+      1,
+      null,
+      1,
+      null,
+      1
+     ]
+    }
+   ],
+   "outages": [
+    {
+     "startMs": 1790813400000,
+     "endMs": 1790815200000
+    }
+   ],
+   "gaps": []
+  }
+ ],
+ "fill": [
+  {
+   "name": "bridges short gaps linearly",
+   "reference": {
+    "t0": 1790812800000,
+    "stepS": 600,
+    "values": [
+     2,
+     2,
+     3,
+     null,
+     5,
+     6
+    ]
+   },
+   "outage": {
+    "startMs": 1790814000000,
+    "endMs": 1790815800000
+   },
+   "values": [
+    2,
+    2,
+    3,
+    4,
+    5,
+    6
+   ]
+  },
+  {
+   "name": "leaves gaps outside the outage",
+   "reference": {
+    "t0": 1790812800000,
+    "stepS": 600,
+    "values": [
+     null,
+     2,
+     3,
+     null,
+     5,
+     null
+    ]
+   },
+   "outage": {
+    "startMs": 1790814000000,
+    "endMs": 1790815800000
+   },
+   "values": [
+    null,
+    2,
+    3,
+    4,
+    5,
+    null
+   ]
+  },
+  {
+   "name": "refuses a reference that ends early",
+   "reference": {
+    "t0": 1790812800000,
+    "stepS": 600,
+    "values": [
+     2,
+     2,
+     3
+    ]
+   },
+   "outage": {
+    "startMs": 1790814000000,
+    "endMs": 1790815800000
+   },
+   "error": "does not cover the whole outage"
+  },
+  {
+   "name": "refuses a reference that starts late",
+   "reference": {
+    "t0": 1790814600000,
+    "stepS": 600,
+    "values": [
+     2,
+     2,
+     3
+    ]
+   },
+   "outage": {
+    "startMs": 1790814000000,
+    "endMs": 1790815800000
+   },
+   "error": "does not cover the whole outage"
+  },
+  {
+   "name": "refuses more than 6 steps in a row",
+   "reference": {
+    "t0": 1790812800000,
+    "stepS": 600,
+    "values": [
+     1,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     9
+    ]
+   },
+   "outage": {
+    "startMs": 1790813400000,
+    "endMs": 1790817600000
+   },
+   "error": "misses 7 steps in a row"
+  },
+  {
+   "name": "refuses a gap without a value before it",
+   "reference": {
+    "t0": 1790812800000,
+    "stepS": 600,
+    "values": [
+     null,
+     null,
+     1,
+     1
+    ]
+   },
+   "outage": {
+    "startMs": 1790812800000,
+    "endMs": 1790814000000
+   },
+   "error": "misses 2 steps in a row"
+  }
+ ]
+}

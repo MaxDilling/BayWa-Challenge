@@ -3,27 +3,42 @@ import { observer } from 'mobx-react-lite'
 import { useCallback, useState, type ReactNode } from 'react'
 import { Chart, type ChartTheme } from '@/components/charts/Chart'
 import { DropZone, FileDrop, FileError } from '@/components/DropZone'
-import { fmtDateTime, fmtNum, fmtPct, STEP_MS } from '@/components/format'
+import { fmtDate, fmtDateTime, fmtNum, fmtPct, STEP_MS } from '@/components/format'
 import { Section } from '@/components/Section'
 import { Warnings } from '@/components/Warnings'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { assignFiles, loadDemo, parsePowerCurveCsv, parseWindCsv, type PowerCurve, type WindSeries } from '@/data'
+import { assignFiles, loadDemo, parsePowerCurveCsv, parseWindCsv, turbineCount, type PowerCurve, type WindSeries } from '@/data'
+import { cn } from '@/lib/utils'
 import { store } from '@/state/store'
 
 const WIND_HINT = 'CSV with a timestamp (Europe/Berlin) and the 10-minute wind speed in m/s.'
 
 export const UploadStep = observer(function UploadStep() {
-  const { target, references, powerCurve, response, warnings } = store
-  const r = response?.explanation.diagnostics.r
+  const { warnings, assignment } = store
   return (
     <div className="flex flex-col gap-section">
       <AllFiles />
       <Warnings items={warnings.filter((w) => w.step === 'upload')} />
-      <h3 className="font-medium">Or add and correct files one role at a time</h3>
-      <div className="grid gap-section lg:grid-cols-3">
+      <RoleZones key={assignment ? 'assigned' : 'by role'} />
+    </div>
+  )
+})
+
+/** The zones per role: open while files came in one role at a time, a disclosure once the all-files drop assigned them. */
+const RoleZones = observer(function RoleZones() {
+  const { target, references, powerCurve, response, assignment } = store
+  const [open, setOpen] = useState(!assignment && !!(target || references.length || powerCurve))
+  const r = response?.explanation.diagnostics.r
+  const chosen = response?.explanation.diagnostics.reference ?? 0
+  return (
+    <details open={open} onToggle={(e) => setOpen(e.currentTarget.open)}>
+      <summary className="cursor-pointer font-medium text-primary">
+        {assignment ? 'Correct the assignment one role at a time' : 'Or add files one role at a time'}
+      </summary>
+      <div className="mt-3 grid gap-section lg:grid-cols-3">
         <DropZone
           title="Target farm"
           hint={`The farm with the outage. ${WIND_HINT}`}
@@ -48,7 +63,7 @@ export const UploadStep = observer(function UploadStep() {
             <SeriesReport
               key={ref.id}
               series={ref}
-              correlation={i === 0 ? r : undefined}
+              correlation={i === chosen ? r : undefined}
               onRemove={() => store.setInputs({ references: references.filter((x) => x !== ref) })}
             />
           ))}
@@ -56,14 +71,13 @@ export const UploadStep = observer(function UploadStep() {
         <DropZone
           title="Power curve"
           hint="CSV with wind speed (m/s) and power (kW) of one turbine."
-          read={(_, text) => parsePowerCurveCsv(text)}
-          onRead={([curve]) => store.setInputs({ powerCurve: curve })}
+          read={(name, text) => ({ curve: parsePowerCurveCsv(text), turbines: turbineCount(name, text), name })}
+          onRead={([{ curve, turbines, name }]) => store.setPowerCurve(curve, turbines, name)}
         >
-          <TurbineCount />
           {powerCurve && <CurveReport curve={powerCurve} />}
         </DropZone>
       </div>
-    </div>
+    </details>
   )
 })
 
@@ -85,10 +99,13 @@ const AllFiles = observer(function AllFiles() {
       {assignment ? (
         <AssignmentView />
       ) : (
-        <p className="text-label text-muted-foreground">
-          No files at hand? The demo has one month of 10-minute data, one reference farm and a 30 h outage.
-        </p>
+        !store.dataset && (
+          <p className="text-label text-muted-foreground">
+            No files at hand? The demo has one month of 10-minute data, one reference farm and a 30 h outage.
+          </p>
+        )
       )}
+      {store.powerCurve && <TurbineDecision />}
     </Section>
   )
 })
@@ -113,7 +130,10 @@ const AssignmentView = observer(function AssignmentView() {
       <ul className="flex flex-col divide-y rounded-lg border text-label">
         {series.map((s) => (
           <li key={s.id} className="flex items-center justify-between gap-3 px-3 py-2">
-            <span className="truncate font-medium">{s.id}</span>
+            <span className="min-w-0">
+              <span className="block truncate font-medium">{s.id}</span>
+              <span className="block text-muted-foreground tabular-nums">{seriesLine(s)}</span>
+            </span>
             {s === chosen ? (
               <Badge>Target</Badge>
             ) : (
@@ -127,7 +147,10 @@ const AssignmentView = observer(function AssignmentView() {
           </li>
         ))}
         <li className="flex items-center justify-between gap-3 px-3 py-2">
-          <span className="font-medium">Power curve</span>
+          <span className="min-w-0">
+            <span className="block font-medium">Power curve</span>
+            {assignment!.powerCurveFile && <span className="block truncate text-muted-foreground">{assignment!.powerCurveFile}</span>}
+          </span>
           {assignment!.powerCurve ? (
             <Badge variant="secondary">
               <Check /> found
@@ -219,25 +242,51 @@ const CurveReport = observer(function CurveReport({ curve }: { curve: PowerCurve
   )
 })
 
-const TurbineCount = observer(function TurbineCount() {
+/** The farm size multiplies every kWh, so it is a decision, highlighted until the user confirms it. */
+const TurbineDecision = observer(function TurbineDecision() {
+  const { nTurbines, turbinesConfirmed, turbinesSource, powerCurve } = store
   const [draft, setDraft] = useState<string>()
+  const rated = Math.max(...powerCurve!.powerKw)
   return (
-    <div className="flex items-center justify-between gap-3">
-      <Label htmlFor="turbines">Turbines in the target farm</Label>
+    <div
+      className={cn(
+        'flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border px-3 py-2.5',
+        !turbinesConfirmed && 'border-primary bg-accent text-accent-foreground',
+      )}
+    >
+      <Label htmlFor="turbines" className="font-medium">
+        {turbinesConfirmed ? 'Turbines in the target farm' : 'How many turbines does the target farm have?'}
+      </Label>
       <Input
         id="turbines"
         type="number"
         min={1}
         step={1}
-        className="w-24 tabular-nums"
-        value={draft ?? store.nTurbines}
+        className="w-20 bg-card tabular-nums"
+        value={draft ?? nTurbines}
         onChange={(e) => {
           setDraft(e.target.value)
           const n = Number(e.target.value)
-          if (Number.isInteger(n) && n >= 1) store.setInputs({ nTurbines: n })
+          if (Number.isInteger(n) && n >= 1) store.setTurbines(n)
         }}
         onBlur={() => setDraft(undefined)}
       />
+      <span className="text-label tabular-nums">
+        × {fmtNum(rated)} kW = <span className="font-medium">{fmtNum(rated * nTurbines)} kW</span> rated farm power
+      </span>
+      {!turbinesConfirmed && (
+        <span className="flex items-center gap-3 sm:ml-auto">
+          {turbinesSource && <span className="text-label">Read from {turbinesSource}</span>}
+          <Button size="sm" onClick={() => store.setTurbines(nTurbines)}>
+            Confirm {fmtNum(nTurbines)} turbine{nTurbines === 1 ? '' : 's'}
+          </Button>
+        </span>
+      )}
     </div>
   )
 })
+
+function seriesLine({ grid, report }: WindSeries) {
+  const steps = grid.values.length
+  return `${fmtDate(grid.t0)} – ${fmtDate(grid.t0 + (steps - 1) * STEP_MS)} · ${fmtPct(report.missing / steps)} missing`
+}

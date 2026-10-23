@@ -1,6 +1,6 @@
 // windgap/engine.py, ported for the models in ./models/registry.ts.
 import type { AnalyzeRequest, AnalyzeResponse, Engine } from '../contract'
-import { backtest, predictWindow } from './backtest'
+import { backtest, MIN_TRAIN_STEPS, predictWindow } from './backtest'
 import { energyLoss, expectedPower } from './energy'
 import { align, pairs, rows, STEP_MS, type Frame } from './frame'
 import type { WindModel } from './models/base'
@@ -24,6 +24,9 @@ export function analyze(req: AnalyzeRequest): AnalyzeResponse {
   const train = Math.max(0, Math.min(start, target.length))
   const trainTarget = target.slice(0, train)
   const trainRefs = rows(refs, 0, train)
+  const nTrain = trainTarget.filter((v) => !Number.isNaN(v)).length
+  if (nTrain < MIN_TRAIN_STEPS)
+    throw new Error(`The target has ${nTrain} values before the outage; at least ${MIN_TRAIN_STEPS} (one day) are needed to learn from.`)
   const model = create(req.model, params).fit(trainTarget, trainRefs)
   const pred = predictWindow(model, refs, start, end)
   const energy = energyLoss(expectedPower(pred, req.powerCurve), model.errors.acf)

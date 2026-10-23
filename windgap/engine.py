@@ -9,7 +9,7 @@ import numpy as np
 import pandas as pd
 
 import windgap
-from windgap.backtest import backtest, predict_window
+from windgap.backtest import MIN_TRAIN_STEPS, backtest, predict_window
 from windgap.core.energy import energy_loss, expected_power
 from windgap.core.grid import align, from_ms, grid_to_series, to_ms
 from windgap.core.schema import STEP, STEP_S, Outage, PowerCurve
@@ -44,6 +44,9 @@ def analyze(req: dict) -> dict:
 
     name, params = req["model"], req.get("params") or {}
     train = df.index < outage.start
+    if (n_train := int(target[train].notna().sum())) < MIN_TRAIN_STEPS:
+        raise ValueError(f"The target has {n_train} values before the outage; at least {MIN_TRAIN_STEPS} "
+                         "(one day) are needed to learn from.")
     model = registry.create(name, **params).fit(target[train], refs[train])
     pred = predict_window(model, refs, outage.start, outage.end)
     energy = energy_loss(expected_power(pred, curve), outage, model.errors.acf)

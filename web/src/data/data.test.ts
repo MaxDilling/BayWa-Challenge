@@ -1,7 +1,7 @@
 import { readdirSync, readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { analyze } from '@/engine/ts/tsEngine'
-import { assignFiles, buildDataset, loadDemo, parsePowerCurveCsv, parseWindCsv, plausibility, toRequest } from '.'
+import { assignFiles, buildDataset, filledTargetCsv, loadDemo, parsePowerCurveCsv, parseWindCsv, plausibility, toRequest, turbineCount } from '.'
 import { isSummerTime } from './berlin'
 import { detectOutages } from './outage'
 
@@ -28,23 +28,18 @@ const csv = (values: (number | null)[], t0 = T0) =>
   'time,wind\n' + values.map((v, i) => `${new Date(t0 + i * 600_000).toISOString()},${v ?? 'NaN'}`).join('\n')
 const series = (values: (number | null)[]) => parseWindCsv('s', csv(values))[0]
 
-describe('outage detection', () => {
-  it('separates outages (≥ 30 min) from measurement gaps and ignores runs without reference data', () => {
-    const target = grid([1, null, 1, null, null, null, 1, null, null, null, null, 1])
-    const ref = grid([1, 1, 1, 1, 1, 1, 1, null, null, null, null, 1])
-    const { outages, gaps } = detectOutages(target, [ref])
-    expect(outages).toEqual([{ startMs: T0 + 3 * 600_000, endMs: T0 + 6 * 600_000 }])
-    expect(gaps).toEqual([{ startMs: T0 + 600_000, endMs: T0 + 2 * 600_000 }])
-  })
+const outageCases = JSON.parse(readFileSync(new URL('../../../fixtures/outage/cases.json', import.meta.url), 'utf8'))
 
-  it('finds an outage running to the end of the reference data', () => {
-    const { outages } = detectOutages(grid([1, 1]), [grid([1, 1, 1, 1, 1])])
-    expect(outages).toEqual([{ startMs: T0 + 2 * 600_000, endMs: T0 + 5 * 600_000 }])
-  })
+describe.each(outageCases.detect)('fixtures/outage detect: $name', ({ target, references, outages, gaps }) => {
+  it('matches', () => expect(detectOutages(target, references)).toEqual({ outages, gaps }))
+})
 
-  it('finds an outage before a target file starts', () => {
-    const { outages } = detectOutages(grid([1, 1], T0 + 3 * 600_000), [grid([1, 1, 1, 1, 1])])
-    expect(outages).toEqual([{ startMs: T0, endMs: T0 + 3 * 600_000 }])
+describe.each(outageCases.fill)('fixtures/outage fill: $name', ({ reference, outage, values, error }) => {
+  it('matches', () => {
+    const dataset = buildDataset({ ...series([1]), id: 'target' }, [{ ...series([1]), id: 'ref', grid: reference }], { windMs: [3, 12], powerKw: [0, 3000] })
+    const fill = () => toRequest(dataset, outage, 'identity').references[0].grid.values
+    if (error) expect(fill).toThrow(error)
+    else expect(fill()).toEqual(values)
   })
 })
 
@@ -54,20 +49,12 @@ describe('power curve', () => {
     expect(parsePowerCurveCsv('v,P (MW)\n3,0\n12,3').powerKw).toEqual([0, 3000])
     expect(() => parsePowerCurveCsv('v,p\n5,0\n4,1')).toThrow('must increase')
   })
-})
 
-describe('request building', () => {
-  const curve = { windMs: [3, 12], powerKw: [0, 3000] }
-  const outage = { startMs: T0 + 2 * 600_000, endMs: T0 + 5 * 600_000 }
-
-  it('bridges short reference gaps during the outage linearly', () => {
-    const dataset = buildDataset(series([1, 1, null, null, null, 1]), [series([2, 2, 3, null, 5, 6])], curve)
-    expect(toRequest(dataset, outage, 'identity').references[0].grid.values).toEqual([2, 2, 3, 4, 5, 6])
-  })
-
-  it('refuses references that end before the outage does', () => {
-    const dataset = buildDataset(series([1, 1, null, null, null, 1]), [series([2, 2, 3])], curve)
-    expect(() => toRequest(dataset, outage, 'identity')).toThrow('does not cover the whole outage')
+  it('reads a turbine count from the file name or the first lines, never from an id like WTG01', () => {
+    expect(turbineCount('curve_4x3MW', 'v;p\n3;0')).toBe(4)
+    expect(turbineCount('farm_12_turbines', 'v;p\n3;0')).toBe(12)
+    expect(turbineCount('curve', 'Number of turbines: 5\nv;p\n3;0')).toBe(5)
+    expect(turbineCount('WTG01_curve', 'v;p\n3;0\n12;3000')).toBeUndefined()
   })
 })
 
@@ -78,6 +65,13 @@ describe('demo data', () => {
     const response = analyze(toRequest(dataset, dataset.outages[0], 'identity'))
     expect(response.prediction.mean).toHaveLength(180)
     expect(response.energy.kwhP50).toBeGreaterThan(0)
+  })
+
+  it('exports the filled target exactly as harness.predict writes it (fixtures/predict/demo.csv)', () => {
+    const dataset = loadDemo()
+    const { prediction } = analyze(toRequest(dataset, dataset.outages[0], 'linear_regression'))
+    const expected = readFileSync(new URL('../../../fixtures/predict/demo.csv', import.meta.url), 'utf8')
+    expect(filledTargetCsv(dataset.target.grid, [prediction])).toBe(expected)
   })
 })
 

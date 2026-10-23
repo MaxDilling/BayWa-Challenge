@@ -7,7 +7,7 @@ from calendar import timegm
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from functools import cache
-from time import gmtime
+from time import gmtime, strftime
 
 import numpy as np
 
@@ -308,3 +308,35 @@ def power_curve(table: Table) -> PowerCurve:
     if len(wind_ms) < 2:
         raise CsvError("A power curve needs at least two points.")
     return PowerCurve(wind_ms=np.array(wind_ms), power_kw=np.array(power_kw))
+
+
+FILLED_HEADER = "Timestamp,Wind speed (m/s),Predicted"
+
+
+def filled_target_csv(target: dict, predictions: list[dict]) -> str:
+    """The target grid in the challenge format, with the predicted mean (3 decimals) where the target is missing
+    during a prediction; `Predicted` is 1 on those rows. Rows span the target and every prediction, times are Europe/
+    Berlin as in the input, measured values unchanged, still missing values NaN. Twin of web/src/data/filled.ts."""
+    spans = [(target["t0"], len(target["values"])), *((p["t0"], len(p["mean"])) for p in predictions)]
+    t0 = min(start for start, _ in spans)
+    values: list[float | None] = [None] * ((max(start + n * STEP_MS for start, n in spans) - t0) // STEP_MS)
+    predicted = [False] * len(values)
+    offset = (target["t0"] - t0) // STEP_MS
+    values[offset:offset + len(target["values"])] = target["values"]
+    for p in predictions:
+        offset = (p["t0"] - t0) // STEP_MS
+        for k, mean in enumerate(p["mean"], offset):
+            if values[k] is None:
+                values[k], predicted[k] = mean, True
+    lines = [FILLED_HEADER]
+    for k, (v, filled) in enumerate(zip(values, predicted)):
+        utc = t0 + k * STEP_MS
+        local = strftime("%Y-%m-%d %H:%M", gmtime((utc + (2 if _is_summer_time(utc) else 1) * HOUR_MS) // 1000))
+        text = "NaN" if v is None else f"{v:.3f}" if filled else _shortest(v)
+        lines.append(f"{local},{text},{int(filled)}")
+    return "\n".join(lines) + "\n"
+
+
+def _shortest(v: float) -> str:
+    """Shortest text that reads back as v, as JavaScript's String(v) writes it."""
+    return repr(float(v)).removesuffix(".0")

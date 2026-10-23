@@ -1,6 +1,6 @@
 import { ImportError, readTable } from './csv'
 import { detectOutages } from './outage'
-import { powerCurve, type PowerCurve } from './powerCurve'
+import { powerCurve, turbineCount, type PowerCurve } from './powerCurve'
 import { timeColumns, windSeries, type WindSeries } from './wind'
 
 export interface Assignment {
@@ -10,6 +10,9 @@ export interface Assignment {
   targetCandidates: string[]
   /** Set when exactly one file has no timestamps. */
   powerCurve?: PowerCurve
+  powerCurveFile?: string
+  /** Turbine count stated in the power curve's file name or first lines. */
+  turbines?: number
   /** Files that could not be read or assigned; the other files are assigned anyway. */
   errors: { file: string; message: string }[]
 }
@@ -17,12 +20,12 @@ export interface Assignment {
 /** Sorts files dropped together into power curve, wind series and target candidates (SPEC.md S1). */
 export function assignFiles(files: { name: string; text: string }[]): Assignment {
   const series: WindSeries[] = []
-  const curves: { file: string; curve: PowerCurve }[] = []
+  const curves: { file: string; curve: PowerCurve; turbines?: number }[] = []
   const errors: Assignment['errors'] = []
   for (const { name, text } of files) {
     try {
       const table = readTable(text)
-      if (!timeColumns(table.rows[0].cells)) curves.push({ file: name, curve: powerCurve(table) })
+      if (!timeColumns(table.rows[0].cells)) curves.push({ file: name, curve: powerCurve(table), turbines: turbineCount(name, text) })
       else {
         const found = windSeries(name.replace(/\.[^.]+$/, ''), table)
         const clash = found.find((s) => series.some((x) => x.id === s.id))
@@ -46,7 +49,7 @@ export function assignFiles(files: { name: string; text: string }[]): Assignment
   return {
     series,
     targetCandidates: series.filter((s) => longest.get(s.id)! > 0).sort((a, b) => longest.get(b.id)! - longest.get(a.id)!).map((s) => s.id),
-    powerCurve: curves.length === 1 ? curves[0].curve : undefined,
+    ...(curves.length === 1 && { powerCurve: curves[0].curve, powerCurveFile: curves[0].file, turbines: curves[0].turbines }),
     errors,
   }
 }

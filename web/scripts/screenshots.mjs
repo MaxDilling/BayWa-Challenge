@@ -1,7 +1,9 @@
-// Screenshots of every GUI step for review: desktop, mobile, dark, an upload error, all demo files dropped at once and the py engine.
+// Screenshots of every GUI step for review: desktop, mobile, dark, an upload error, all demo files dropped at once,
+// data that triggers plausibility warnings and the py engine.
 // Usage (after make build): node web/scripts/screenshots.mjs [outDir]. Exits 1 on any console error.
 import { spawn } from 'node:child_process'
-import { mkdirSync, rmSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { chromium } from 'playwright'
@@ -58,9 +60,30 @@ await empty.locator('input[type=file]').first().setInputFiles(join(root, 'fixtur
 await shot(empty, 'upload-error.png')
 const demo = ['target', 'reference', 'power_curve'].map((f) => join(root, `data/synthetic/demo_${f}.csv`))
 await empty.locator('input[type=file]').first().setInputFiles(demo)
-await empty.getByText('kWh lost').waitFor({ state: 'attached' })
+await empty.getByText('How many turbines does the target farm have?').waitFor()
 await shot(empty, 'upload-all-files.png')
+await empty.getByLabel('How many turbines').fill('4')
+await empty.getByText('kWh lost').waitFor({ state: 'attached' })
+await empty.locator('nav[aria-label=Steps] button').nth(3).click()
+await shot(empty, 'upload-all-files-results.png')
 await empty.close()
+
+// Three days of target data before the outage and a power curve in MW under a kW header.
+const scratch = mkdtempSync(join(tmpdir(), 'windgap-warnings-'))
+const [target, reference, curve] = demo.map((f) => readFileSync(f, 'utf8'))
+const [head, ...rows] = target.trim().split('\n')
+writeFileSync(join(scratch, 'target.csv'), [head, ...rows.filter((r) => r >= '2026-10-24')].join('\n'))
+writeFileSync(join(scratch, 'reference.csv'), reference)
+writeFileSync(join(scratch, 'curve.csv'), curve.replace(/,([\d.]+)$/gm, (_, kw) => `,${kw / 1000}`))
+const warned = await open('warnings', single, DESKTOP)
+await warned.locator('input[type=file]').first().setInputFiles(['target.csv', 'reference.csv', 'curve.csv'].map((f) => join(scratch, f)))
+await warned.getByRole('button', { name: /^Confirm/ }).click()
+await warned.getByText('kWh lost').waitFor({ state: 'attached' })
+await shot(warned, 'warnings-1-upload.png')
+await warned.locator('nav[aria-label=Steps] button').nth(3).click()
+await shot(warned, 'warnings-4-results.png')
+await warned.close()
+rmSync(scratch, { recursive: true })
 
 await variant('desktop', single, DESKTOP)
 await variant('mobile', single, MOBILE)

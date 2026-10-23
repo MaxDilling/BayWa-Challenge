@@ -46,3 +46,15 @@ def test_prediction_spans_outage():
     assert response["energy"]["kwhP10"] <= response["energy"]["kwhP50"] <= response["energy"]["kwhP90"]
     assert len(response["scatter"]["ref"]) <= 2000
     assert response["validation"]["n_folds"] >= 1
+
+
+def test_refuses_an_outage_without_a_day_of_target_data_before_it():
+    request = fixtures.cases("identity")["basic"]
+    request["outage"]["startMs"] = request["target"]["t0"] + 143 * 600_000
+    with pytest.raises(ValueError, match="143 values before the outage"):
+        handle(json.dumps(request))
+
+
+def test_demo_prediction_is_current():
+    """harness.predict fills the demo outage; the GUI's filled-series export is tested against the same file."""
+    assert fixtures.demo_prediction() == fixtures.PREDICT.read_text()

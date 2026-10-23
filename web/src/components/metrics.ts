@@ -1,5 +1,6 @@
 // Words for the engine's numbers: validation keys, the backtest verdict and the energy headline, shared by Method, Results and Export.
 import { fmtDuration, fmtNum, fmtPct } from '@/components/format'
+import type { Dataset } from '@/data'
 import type { AnalyzeResponse } from '@/engine'
 
 export interface MetricInfo {
@@ -60,6 +61,10 @@ export function verdict(v: Record<string, number>, outageMs: number): string | u
 /** How the energy range is made, in one sentence for insurers (SPEC.md S4). */
 export const BAND_HINT =
   'The range assumes that the model’s errors persist as long as they did in the backtest on your data: over a short outage they add up almost fully, over a long one they partly cancel.'
+
+/** The farm the energy is for: "4 turbines × 3,000 kW". */
+export const farmText = ({ nTurbines, powerCurve }: Dataset) =>
+  `${fmtNum(nTurbines)} turbine${nTurbines === 1 ? '' : 's'} × ${fmtNum(Math.max(...powerCurve.powerKw))} kW`
 
 /** The lost energy in one sentence for insurers. */
 export const headline = ({ kwhP10, kwhP50, kwhP90 }: AnalyzeResponse['energy']) =>

@@ -1,4 +1,4 @@
-.PHONY: install dev test fixtures demo harness dwd wheel pyodide build serve screenshots
+.PHONY: install dev test fixtures demo harness predict dwd wheel pyodide build serve screenshots
 
 install:
 	uv sync
@@ -23,6 +23,17 @@ demo:
 # Leaderboard over all models and datasets in configs/eval.yaml, written to runs/<time>_<commit>/
 harness:
 	uv run python -m harness --config configs/eval.yaml --models all
+
+# Submission without the GUI: every outage of the target filled, challenge format plus a Predicted column.
+# make predict TURBINES=4 [TARGET=... REFERENCES="a.csv b.csv" POWER_CURVE=... MODEL=... OUT=...]
+TARGET ?= data/challenge/target.csv
+REFERENCES ?= data/challenge/reference.csv
+POWER_CURVE ?= data/challenge/power_curve.csv
+MODEL ?= linear_regression
+OUT ?= predictions.csv
+predict:
+	uv run python -m harness.predict --target $(TARGET) $(addprefix --reference ,$(REFERENCES)) --power-curve $(POWER_CURVE) \
+		$(if $(TURBINES),--n-turbines $(TURBINES)) --model $(MODEL) --out $(OUT)
 
 # data/dwd/<pair>/: five real DWD station pairs, downloaded from opendata.dwd.de (not checked in)
 dwd:

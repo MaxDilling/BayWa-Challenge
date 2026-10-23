@@ -35,5 +35,5 @@ def nan_to_none(values) -> list[float | None]:
 
 def align(series: list[pd.Series]) -> pd.DataFrame:
     """Join series on one gap-free 10-minute grid spanning all of them."""
-    df = pd.concat(series, axis=1)
+    df = pd.concat(series, axis=1, sort=True)
     return df.reindex(pd.date_range(df.index[0], df.index[-1], freq=STEP))

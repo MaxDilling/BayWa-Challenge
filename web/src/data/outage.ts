@@ -11,7 +11,8 @@ const MIN_OUTAGE_STEPS = 3
 
 /**
  * Runs of missing target values while a reference is measuring. Runs of ≥ 3 steps (30 min) are outages,
- * shorter ones measurement gaps. Outages are sorted longest first.
+ * shorter ones measurement gaps. Outages are sorted longest first, those before the first target value last,
+ * because there is nothing to learn from. windgap/core/outage.py is the Python twin.
  */
 export function detectOutages(target: Grid, references: Grid[]): { outages: Span[]; gaps: Span[] } {
   const { t0, cols } = align([target, ...references])
@@ -28,8 +29,10 @@ export function detectOutages(target: Grid, references: Grid[]): { outages: Span
     }
   }
   const steps = (s: Span) => (s.endMs - s.startMs) / STEP_MS
+  const firstValue = t0 + tgt.findIndex((v) => !Number.isNaN(v)) * STEP_MS
+  const leading = (s: Span) => Number(s.startMs < firstValue)
   return {
-    outages: runs.filter((s) => steps(s) >= MIN_OUTAGE_STEPS).sort((a, b) => steps(b) - steps(a)),
+    outages: runs.filter((s) => steps(s) >= MIN_OUTAGE_STEPS).sort((a, b) => leading(a) - leading(b) || steps(b) - steps(a)),
     gaps: runs.filter((s) => steps(s) < MIN_OUTAGE_STEPS),
   }
 }

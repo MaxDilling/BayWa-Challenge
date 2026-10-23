@@ -1,5 +1,6 @@
-"""Writes fixtures/golden/<model>/<case>.json: an AnalyzeRequest and windgap's response to it (minus `engine`), and
-fixtures/models.json: the ModelInfo list. The ts engine must reproduce both for every model it ports. Run: make fixtures"""
+"""Writes fixtures/golden/<model>/<case>.json: an AnalyzeRequest and windgap's response to it (minus `engine`),
+fixtures/models.json: the ModelInfo list, and fixtures/predict/demo.csv: the demo target filled by harness.predict.
+The ts engine must reproduce all of them (the GUI's "Filled target series" export must equal demo.csv). Run: make fixtures"""
 
 import json
 import shutil
@@ -8,6 +9,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+from harness.predict import predict
 from harness.synthetic import generic_power_curve, synthetic_pair
 from windgap.core.grid import series_to_grid, to_ms
 from windgap.core.schema import STEP
@@ -16,6 +18,15 @@ from windgap.models import registry
 
 GOLDEN = Path(__file__).resolve().parent.parent / "fixtures" / "golden"
 MODELS = GOLDEN.parent / "models.json"
+DEMO = GOLDEN.parent.parent / "data" / "synthetic"
+PREDICT = GOLDEN.parent / "predict" / "demo.csv"
+
+
+def demo_prediction() -> str:
+    """harness.predict on the demo files with the GUI's demo settings (4 turbines, recommended model)."""
+    csv, _, _ = predict(DEMO / "demo_target.csv", [DEMO / "demo_reference.csv"], DEMO / "demo_power_curve.csv", 4,
+                        registry.RECOMMENDED)
+    return csv
 
 
 def _request(target: pd.Series, refs: dict[str, pd.Series], start: pd.Timestamp, steps: int, model: str) -> dict:
@@ -59,6 +70,9 @@ def main() -> None:
             print(f"wrote {path.relative_to(GOLDEN.parent.parent)}")
     MODELS.write_text(json.dumps(registry.info(), indent=2) + "\n")
     print(f"wrote {MODELS.relative_to(GOLDEN.parent.parent)}")
+    PREDICT.parent.mkdir(exist_ok=True)
+    PREDICT.write_text(demo_prediction())
+    print(f"wrote {PREDICT.relative_to(GOLDEN.parent.parent)}")
 
 
 if __name__ == "__main__":

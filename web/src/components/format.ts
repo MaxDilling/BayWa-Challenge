@@ -23,6 +23,7 @@ const dayTime = new Intl.DateTimeFormat('en-GB', {
   hour: '2-digit',
   minute: '2-digit',
 })
+const date = new Intl.DateTimeFormat('en-GB', { timeZone: TZ, day: 'numeric', month: 'short', year: 'numeric' })
 const time = new Intl.DateTimeFormat('en-GB', { timeZone: TZ, hour: '2-digit', minute: '2-digit' })
 const day = new Intl.DateTimeFormat('en-GB', { timeZone: TZ, day: 'numeric', month: 'short' })
 const parts = new Intl.DateTimeFormat('en-CA', {
@@ -37,6 +38,7 @@ const parts = new Intl.DateTimeFormat('en-CA', {
 })
 
 export const fmtDateTime = (ms: number) => dateTime.format(ms)
+export const fmtDate = (ms: number) => date.format(ms)
 export const fmtDayTime = (ms: number) => dayTime.format(ms)
 export const fmtSpan = (s: Span) => `${fmtDateTime(s.startMs)} – ${fmtDateTime(s.endMs)}`
 

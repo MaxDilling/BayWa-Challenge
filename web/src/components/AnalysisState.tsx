@@ -30,6 +30,12 @@ export const AnalysisState = observer(function AnalysisState() {
         The target series has no gap of 30 min or more. Mark the outage period on the timeline.
       </Notice>
     )
+  if (!store.turbinesConfirmed)
+    return (
+      <Notice tone="empty" title="How many turbines?" action={<Button onClick={() => store.setStep('upload')}>Confirm the turbine count</Button>}>
+        The lost energy scales with the number of turbines in the target farm. Confirm it on the Upload step.
+      </Notice>
+    )
   if (!engine)
     return (
       <Notice tone="loading" title={engineProgress?.msg ?? 'Starting the engine'} progress={engineProgress?.pct}>

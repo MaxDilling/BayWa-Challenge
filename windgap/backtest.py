@@ -16,7 +16,7 @@ def fold(model: str, params: dict, target: pd.Series, refs: pd.DataFrame, curve:
     window = (target.index >= start) & (target.index < end)
     fitted = registry.create(model, **params).fit(target[before], refs[before])
     pred = fitted.predict(refs[window])
-    return pred, evaluate(target[window], pred, curve)
+    return pred, evaluate(target[window], pred, curve, fitted.errors.acf)
 
 
 def backtest(model: str, params: dict, target: pd.Series, refs: pd.DataFrame, curve: PowerCurve,

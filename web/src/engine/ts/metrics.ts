@@ -7,7 +7,7 @@ const pick = (a: Float64Array, idx: number[]) => Float64Array.from(idx, (i) => a
 const avg = (xs: number[]) => xs.reduce((s, x) => s + x, 0) / xs.length
 
 /** Metrics of one scenario over steps with both truth and prediction. energy_dev_pct is signed. */
-export function evaluate(truth: Float64Array, pred: Prediction, curve: PowerCurve): Record<string, number> {
+export function evaluate(truth: Float64Array, pred: Prediction, curve: PowerCurve, acf: number[]): Record<string, number> {
   const idx = [...truth.keys()].filter((i) => !Number.isNaN(truth[i]) && !Number.isNaN(pred.mean[i]))
   if (!idx.length) return {}
   const p: Prediction = {
@@ -22,7 +22,7 @@ export function evaluate(truth: Float64Array, pred: Prediction, curve: PowerCurv
   const power = expectedPower(p, curve)
   const pTrue = t.map((v) => parkPowerKw(curve, v))
   const pErr = pTrue.map((v, i) => power.pMeanKw[i] - v)
-  const energy = energyLoss(power)
+  const energy = energyLoss(power, acf)
   const trueKwh = pTrue.reduce((s, x) => s + x, 0) * STEP_H
   const metrics: Record<string, number> = {
     wind_rmse: Math.sqrt(avg(err.map((e) => e * e))),
@@ -34,6 +34,7 @@ export function evaluate(truth: Float64Array, pred: Prediction, curve: PowerCurv
     energy_coverage_80: Number(energy.kwhP10 <= trueKwh && trueKwh <= energy.kwhP90),
     energy_true_kwh: trueKwh,
     energy_err_kwh: energy.kwhP50 - trueKwh,
+    energy_band_kwh: energy.kwhP90 - energy.kwhP10,
   }
   if (trueKwh > 0) {
     metrics.energy_dev_pct = (100 * (energy.kwhP50 - trueKwh)) / trueKwh
@@ -42,7 +43,8 @@ export function evaluate(truth: Float64Array, pred: Prediction, curve: PowerCurv
   return metrics
 }
 
-/** Mean of each metric over scenarios that have it; energy_dev_pct as mean of |·|; energy_wape_pct = Σ|err| / Σ true. */
+/** Mean of each metric over scenarios that have it; energy_dev_pct as mean of |·|; energy_wape_pct = Σ|err| / Σ true,
+ * energy_band_pct = Σ band / Σ true. */
 export function summarize(results: Record<string, number>[]): Record<string, number> {
   const keys = [...new Set(results.flatMap(Object.keys))]
   const summary: Record<string, number> = Object.fromEntries(
@@ -52,6 +54,9 @@ export function summarize(results: Record<string, number>[]): Record<string, num
     }),
   )
   const trueKwh = results.reduce((s, r) => s + r.energy_true_kwh, 0)
-  if (trueKwh > 0) summary.energy_wape_pct = (100 * results.reduce((s, r) => s + Math.abs(r.energy_err_kwh), 0)) / trueKwh
+  if (trueKwh > 0) {
+    summary.energy_wape_pct = (100 * results.reduce((s, r) => s + Math.abs(r.energy_err_kwh), 0)) / trueKwh
+    summary.energy_band_pct = (100 * results.reduce((s, r) => s + r.energy_band_kwh, 0)) / trueKwh
+  }
   return summary
 }

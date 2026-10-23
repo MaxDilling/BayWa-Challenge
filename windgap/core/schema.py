@@ -6,6 +6,7 @@ import pandas as pd
 STEP = pd.Timedelta("10min")
 STEP_S = 600
 STEP_H = 1 / 6
+Z90 = 1.2815515655446004  # standard normal 90 % quantile
 
 
 @dataclass

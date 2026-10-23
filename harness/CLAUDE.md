@@ -8,7 +8,7 @@ Läuft nur nativ und kommt nicht ins Wheel. Szenarien, Metriken und Ausgabeforma
 - **Kein Datenleck.** Training nur vor t₀; Normierung, Lag-Suche und Parameterwahl nur auf Trainingsdaten des jeweiligen Szenarios. Der Holdout (letzte ca. 5 Tage) läuft nur mit `--holdout` für finale Entscheidungen.
 - **Reproduzierbar.** Jeder Zufall über `np.random.default_rng(seed)`, Seed aus der Konfiguration. Jeder Lauf schreibt Konfiguration und Git-Commit nach `runs/<zeit>_<commit>/`.
 - **Unter 30 Sekunden** für alle Modelle. Wird es langsamer, zuerst Szenarien ausdünnen, nicht parallelisieren.
-- **Neue Daten brauchen keinen Code:** Ordner nach dem Layout in `datasets.py` anlegen und in `configs/eval.yaml` eintragen. Score-Gewichte und Szenarien stehen nur dort.
+- **Neue Daten brauchen keinen Code:** Ordner nach dem Layout in `datasets.py` anlegen und in `configs/eval.yaml` eintragen (optional `wind_scale` für Messhöhen weit unter Nabenhöhe). Score-Gewichte und Szenarien stehen nur dort.
 - `demo.py` schreibt die Demo-Daten der GUI (`make demo`) im Challenge-Format; die GUI liest sie über den normalen CSV-Import.
 - `synthetic.py` liefert Paare mit bekannter Wahrheit. Ändert sich der Generator, ändern sich Golden-Fixtures und Leaderboard; danach `make fixtures`.
 - `dwd.py` lädt echte Stationspaare (`make dwd`) nach `data/dwd/`. Paare und Zeitfenster stehen fest im Code, damit jeder Download dieselben Daten liefert; nie Werte ergänzen oder glätten.

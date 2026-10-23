@@ -8,8 +8,9 @@ from windgap.core.powercurve import park_power_kw
 from windgap.core.schema import STEP, STEP_H, Outage, PowerCurve
 
 
-def evaluate(truth: pd.Series, pred: pd.DataFrame, curve: PowerCurve) -> dict[str, float]:
-    """Metrics of one scenario over steps with both truth and prediction. energy_dev_pct is signed."""
+def evaluate(truth: pd.Series, pred: pd.DataFrame, curve: PowerCurve, acf: np.ndarray) -> dict[str, float]:
+    """Metrics of one scenario over steps with both truth and prediction, the energy band with the model's error
+    autocorrelation `acf` (S4). energy_dev_pct is signed."""
     mask = (truth.notna() & pred["mean"].notna()).to_numpy()
     if not mask.any():
         return {}
@@ -19,7 +20,7 @@ def evaluate(truth: pd.Series, pred: pd.DataFrame, curve: PowerCurve) -> dict[st
     power = expected_power(p, curve)
     p_true = park_power_kw(curve, t)
     p_err = power["p_mean_kw"].to_numpy() - p_true
-    energy = energy_loss(power, Outage(p.index[0], p.index[-1] + STEP))
+    energy = energy_loss(power, Outage(p.index[0], p.index[-1] + STEP), acf)
     true_kwh = p_true.sum() * STEP_H
     metrics = {
         "wind_rmse": float(np.sqrt(np.mean(err**2))),
@@ -31,6 +32,7 @@ def evaluate(truth: pd.Series, pred: pd.DataFrame, curve: PowerCurve) -> dict[st
         "energy_coverage_80": float(energy.kwh_p10 <= true_kwh <= energy.kwh_p90),
         "energy_true_kwh": float(true_kwh),
         "energy_err_kwh": float(energy.kwh_p50 - true_kwh),
+        "energy_band_kwh": float(energy.kwh_p90 - energy.kwh_p10),
     }
     if true_kwh > 0:
         metrics["energy_dev_pct"] = float(100 * (energy.kwh_p50 - true_kwh) / true_kwh)
@@ -40,12 +42,14 @@ def evaluate(truth: pd.Series, pred: pd.DataFrame, curve: PowerCurve) -> dict[st
 
 def summarize(results: list[dict[str, float]]) -> dict[str, float]:
     """Mean of each metric over scenarios that have it; energy_dev_pct as mean of |·| so that errors of opposite
-    sign do not cancel. energy_wape_pct = Σ|energy_err_kwh| / Σ energy_true_kwh weights scenarios by their energy,
-    so calm scenarios with a tiny true energy cannot dominate it the way they dominate energy_dev_pct."""
+    sign do not cancel. energy_wape_pct = Σ|energy_err_kwh| / Σ energy_true_kwh and energy_band_pct =
+    Σ energy_band_kwh / Σ energy_true_kwh weight scenarios by their energy, so calm scenarios with a tiny true energy
+    cannot dominate them the way they dominate the mean of per-scenario percentages."""
     table = pd.DataFrame(results)
     summary = table.mean().to_dict()
     if "energy_dev_pct" in table:
         summary["energy_dev_pct"] = float(table["energy_dev_pct"].abs().mean())
     if (true_kwh := table["energy_true_kwh"].sum()) > 0:
         summary["energy_wape_pct"] = float(100 * table["energy_err_kwh"].abs().sum() / true_kwh)
+        summary["energy_band_pct"] = float(100 * table["energy_band_kwh"].sum() / true_kwh)
     return summary

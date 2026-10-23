@@ -111,6 +111,7 @@ Ausfallerkennung: zusammenhängende NaN-Blöcke im Ziel von mindestens 3 Zeitsch
 ```python
 class WindModel(Protocol):
     name: str                # eindeutig, z. B. "variance_ratio"
+    errors: Errors           # setzt fit: σ und Fehlergedächtnis, siehe unten
     def fit(self, target: pd.Series, refs: pd.DataFrame,
             extra: pd.DataFrame | None = None) -> "WindModel": ...
     def predict(self, refs: pd.DataFrame,
@@ -131,20 +132,29 @@ class VarianceRatio: ...
 
 Regeln: `fit` sieht nur Daten vor dem Ausfall (außer im Modus `train_on="both"`). `predict` darf nur `refs` und `extra` verwenden, nie das Ziel. Vorhersagen sind nach unten auf 0 begrenzt.
 
+**Unsicherheit (`windgap.models.base.calibrate`, für jedes Modell dieselbe Routine):** Der Trainingszeitraum wird in 5 zusammenhängende Blöcke geteilt; jeder Block wird von einer Anpassung auf den anderen vier vorhergesagt (Leave-one-block-out). Aus diesen Fehlern auf ungesehenen Daten entsteht `Errors`:
+
+- `sigma_0`, `sigma_slope`: σ_t = `sigma_0` + `sigma_slope` · v̂_t. Der mittlere Betrag des Fehlers wird als Gerade in der Vorhersage v̂ angepasst (kleinste Quadrate, beide Koeffizienten ≥ 0), dann so skaliert, dass 80 % der Fehler in ±Z₉₀ · σ_t liegen. Der Fehler wächst mit dem Wind; ein konstantes σ wäre bei Flaute zu breit (E[P(v)] zu hoch) und im steilen Teil der Kurve zu schmal.
+- `acf`: Autokorrelation der standardisierten Fehler err_t / σ_t um 0 (nicht um ihren Mittelwert, damit ein anhaltender Versatz als Gedächtnis zählt), Lag 0, 1, … bis vor den ersten Lag mit acf ≤ 0, höchstens 3 Tage. `memory_h` = (1 + 2 Σ acf(k)) · 10 min ist die integrale Zeitskala, in der GUI „error memory“.
+
+Lag-Suche, Koeffizienten und `Errors` entstehen nur aus den Trainingsdaten (in der Harness: vor t₀).
+
 ### S4 Energie (T4)
 
 ```python
 def expected_power(pred: pd.DataFrame, curve: PowerCurve) -> pd.DataFrame
-    # Spalten: p_mean_kw, p_q10_kw, p_q90_kw
-def energy_loss(power: pd.DataFrame, outage: Outage) -> EnergyResult
-    # kwh_p50, kwh_p10, kwh_p90, cumulative (Zeitreihe)
+    # Spalten: p_mean_kw, p_std_kw
+def energy_loss(power: pd.DataFrame, outage: Outage, acf: np.ndarray) -> EnergyResult
+    # kwh_p50, kwh_p10, kwh_p90, cumulative (Zeitreihe); acf = model.errors.acf
 ```
 
 Energie je Zeitschritt = Leistung (kW) × 1/6 h.
 
-- `p_mean_kw` ist E[P(v)] mit v ~ N(mean, std²), Gauß-Hermite mit 20 Stützstellen. `p_q10_kw`/`p_q90_kw` sind P(q10)/P(q90).
+- `p_mean_kw` ist E[P(v)], `p_std_kw` die Standardabweichung SD[P(v)], beide mit v ~ N(mean, std²), Gauß-Hermite mit 20 Stützstellen.
 - **Konvention:** P10 = 10-%-Quantil (niedriger Wert), P90 = 90-%-Quantil (hoher Wert), wie `q10`/`q90`. In Windgutachten heißt der *konservative* Wert oft „P90“ (Überschreitungswahrscheinlichkeit); im Bericht deshalb immer „10 % / 90 % Quantil“ dazuschreiben.
-- `kwh_p10`/`kwh_p90` summieren die Quantile je Zeitschritt, nehmen also voll korrelierte Fehler an (breites Band, passt zu „Bias ist der Hauptfeind“). Ob das Band kalibriert ist, misst `energy_coverage_80` (Anteil der Szenarien, deren echte Energie in \[`kwh_p10`, `kwh_p90`\] liegt; Ziel ca. 0,8), wie scharf es ist, `energy_band_pct`. Beide rechnen über `energy_loss`, messen also immer das Band, das die GUI zeigt.
+- **Energieband:** `kwh_p50` = Σ E[P]·h; `kwh_p10`/`kwh_p90` = P50 ∓ Z₉₀ · SD(Summe), P10 nach unten auf 0 begrenzt. Var(Summe) = Σᵢ Σⱼ sᵢ sⱼ acf(|i − j|) mit sᵢ = `p_std_kw` · h und acf aus `model.errors` (0 jenseits ihres Endes). Für die Versicherung in einem Satz: *„Die Spanne nimmt an, dass die Fehler des Modells so lange anhalten wie im Backtest auf euren eigenen Daten: Bei kurzen Ausfällen addieren sie sich fast voll, bei langen gleicht sich ein Teil aus.“*
+- Warum so (Harness, 1793 Szenarien, LR): Die Summe der Quantile je Schritt (voll korreliert) war für lange Ausfälle zu breit und nach Kalibrierung von σ systematisch zu breit; unabhängige Fehler wären für kurze zu schmal. AR(1) mit ρ aus Lag 1 unterschätzt das Gedächtnis (echte Fehler fallen erst schnell, dann langsam ab: acf ≈ 0,8 bei 10 min, 0,2–0,4 bei 6 h auf DWD), deshalb die gemessene acf. Ergebnis `energy_coverage_80` je Länge 1 h … 120 h: 0,91 / 0,91 / 0,88 / 0,85 / 0,77 / 0,80 / 0,78. Kurze Ausfälle bleiben überdeckt, weil die Energie je Schritt beschränkt und schief verteilt ist (Flaute, Nennleistung) und P50 ± Z₉₀·SD dann mehr als 80 % abdeckt; ein Band aus P(q10)/P(q90) statt SD deckte nur 0,63–0,73 ab.
+- Ob das Band kalibriert ist, misst `energy_coverage_80` (Anteil der Szenarien, deren echte Energie in \[`kwh_p10`, `kwh_p90`\] liegt; Ziel ca. 0,8), wie scharf es ist, `energy_band_pct`. Beide rechnen über `energy_loss`, messen also immer das Band, das die GUI zeigt.
 - Metriken gibt es nur einmal: `windgap/core/metrics.py` (`evaluate` je Szenario, `summarize` über Szenarien). Engine-Validierung und Harness rufen dieselben Funktionen.
 
 ### S5 Engine-Kontrakt (T5)
@@ -189,7 +199,7 @@ interface AnalyzeResponse {
 
 **Regeln an der Grenze:** JSON kennt kein NaN. Fehlende Messwerte sind `null`; eine nicht berechenbare Kennzahl fehlt in `validation`/`params`/`diagnostics`, statt NaN oder 0 zu sein. `validation` ist der Backtest von `windgap.backtest.backtest`: bis zu 5 simulierte Ausfälle in Länge des echten Ausfalls, rückwärts vom Trainingsende, zusammengefasst mit `metrics.summarize` (Mittelwert je Metrik, `energy_dev_pct` als Betrag, `energy_wape_pct`), dazu `n_folds`. `scatter.fitLine` ist die In-Sample-Vorhersage, gemittelt je 1-m/s-Klasse der Referenz; das funktioniert auch für Lag- und Tageszeitmodelle. Ausdünnung auf 2000 Punkte deterministisch über Index `floor(i · n / k)`.
 
-**Dummy-Modell für den ersten Durchstich:** `identity` (Ziel = Referenz, σ konstant 1 m/s). Es existiert in beiden Engines und liefert eine vollständige `AnalyzeResponse`, damit jede Ansicht der GUI ab heute Abend mit echten Strukturen gefüllt ist.
+**Modelle in beiden Engines:** `identity` (Ziel = Referenz, Baseline), `linear_regression` (Standard der GUI) und `variance_ratio`, alle mit kalibriertem σ (S3).
 
 ## Modellarchitektur
 
@@ -216,7 +226,9 @@ Wir bauen eine Modellleiter aus Measure-Correlate-Predict-Verfahren (MCP), dem S
 
 Das holt die von LR weggenommene Streuung zurück und minimiert zugleich den Leistungs-RMSE. Numerisch mit Gauß-Hermite-Quadratur (ca. 20 Stützstellen), in einer Zeile erklärbar. Die Harness vergleicht beide Varianten.
 
-**Unsicherheit:** σ kommt aus den Residuen der Backtests, nicht aus der Trainingsanpassung. Erste Version konstant, zweite Version abhängig von v\_r (Residuen-Streuung je Geschwindigkeitsklasse). Ziel: das 80-%-Band enthält in den Backtests ca. 80 % der echten Werte; die Harness misst diese Abdeckung.
+**Unsicherheit:** σ kommt aus Fehlern auf ungesehenen Trainingsdaten (Leave-one-block-out, S3), nicht aus der Trainingsanpassung, und wächst linear mit der vorhergesagten Windgeschwindigkeit. Ergebnis: `coverage_80` 0,78–0,83 je Datensatz (vorher mit σ = 1 m/s: 0,37–0,64). Ein konstantes σ (80-%-Quantil) gab ähnliche Abdeckung, aber schlechtere Leistungsfehler und ein zu schmales Energieband bei langen Ausfällen.
+
+**Umgesetzt (`windgap/models/linear.py`):** M1 `linear_regression` und M2 `variance_ratio` sind eine Klasse, die sich nur in (a, b) unterscheidet; M3 ist der Parameter `lag_max_min` (Standard 60): τ ∈ \[−60, 60\] min maximiert die Korrelation auf den Trainingsdaten. Weil `predict` nur das Ausfallfenster sieht, nutzen die ersten τ Schritte den ersten Referenzwert. Harness (Score, kleiner besser; identity = 1): LR 0,72, LR ohne Lag 0,75, VR 0,79. τ hilft auf Synthetik (+20 min), Demo und Hamburg, ±180 min bringt nichts zusätzlich. **LR schlägt VR auch bei der Energie** (`energy_wape_pct` 40 % gegen 50 %): E[P(v)] über die kalibrierte Verteilung holt die Streuung zurück, die LR im Mittelwert verliert (Hypothese oben bestätigt). LR ist deshalb Standard in der GUI.
 
 **Trainingsfenster:** Standard sind alle Daten vor dem Ausfall. Als Parameter testen: nur die letzten N Tage, oder exponentiell abklingende Gewichte, weil jüngere Wetterlagen ähnlicher sind.
 
@@ -250,16 +262,16 @@ Bei 30 Tagen Daten sind das ca. 260 Szenarien je Datensatz und Modell, `identity
 | `bias` | mittlerer Windfehler, m/s |
 | `coverage_80` | Anteil echter Werte im 80-%-Band, je Zeitschritt |
 | `energy_coverage_80` | Anteil der Szenarien, deren echte Energie in \[`kwh_p10`, `kwh_p90`\] liegt (je Szenario 0 oder 1); Ziel ca. 0,8 |
-| `energy_band_pct` | (`kwh_p90` − `kwh_p10`) / echte Energie, Breite des Energiebands |
-| `energy_true_kwh`, `energy_err_kwh` | echte Energie und Fehler `kwh_p50` − echt je Szenario, kWh |
+| `energy_band_pct` | (`kwh_p90` − `kwh_p10`) / echte Energie, Breite des Energiebands; zusammengefasst energiegewichtet wie `energy_wape_pct`: Σ `energy_band_kwh` / Σ `energy_true_kwh` |
+| `energy_true_kwh`, `energy_err_kwh`, `energy_band_kwh` | echte Energie, Fehler `kwh_p50` − echt und Bandbreite `kwh_p90` − `kwh_p10` je Szenario, kWh |
 | `energy_wape_pct` | nur zusammengefasst: Σ \|`energy_err_kwh`\| / Σ `energy_true_kwh` über Szenarien. Gewichtet Szenarien nach Energie; der Mittelwert von \|`energy_dev_pct`\| wird dagegen von Flaute-Szenarien mit winziger echter Energie beherrscht (Baseline: über 1000 % bei 6 h) |
 | `score` | nur Harness: gewichtetes Mittel der Jury-Metriken im Verhältnis zur Baseline (siehe unten) |
 
-Prozentwerte fehlen in Szenarien ohne echte Energie (Flaute). Über Szenarien fasst `summarize` zusammen: Mittelwert je Metrik, `energy_dev_pct` als Mittel der Beträge, dazu `energy_wape_pct`.
+Prozentwerte fehlen in Szenarien ohne echte Energie (Flaute). Über Szenarien fasst `summarize` zusammen: Mittelwert je Metrik, `energy_dev_pct` als Mittel der Beträge, `energy_wape_pct` und `energy_band_pct` energiegewichtet.
 
 **Score:** `score` = Σ wᵢ · metricᵢ / metricᵢ(Baseline) / Σ wᵢ über die Metriken und Gewichte unter `score:` in `configs/eval.yaml` (Standard: `wind_rmse`, `wind_mae`, `power_rmse`, `power_mae`, `energy_wape_pct`, je 1). Die Baseline (`baseline:`, Standard `identity`) läuft immer mit und hat Score 1; kleiner ist besser. Berechnet je Datensatz × Ausfalllänge und je Datensatz über alle Längen; die Zeilen `dataset = all` mitteln die Datensätze gleichgewichtet (Score eingeschlossen). Kalibrierung (`coverage_80`, `energy_coverage_80`) steht daneben, zählt aber nicht in den Score, weil die Jury sie nicht bewertet.
 
-**Datensätze** stehen in `configs/eval.yaml`: `kind: synthetic` (Generator) oder `kind: folder` mit Glob relativ zum Repo (`data/synthetic`, `data/dwd/*`, `data/challenge`). Ein Ordner enthält genau eine Leistungskurve (CSV ohne Zeitstempel) und Wind-CSVs nach S1; die Reihe, deren ID `target` enthält (Dateiname bzw. Spaltenkopf), ist das Ziel, alle anderen sind Referenzen. Für die Challenge also z. B. `data/challenge/target.csv`, `reference.csv`, `power_curve.csv`; `n_turbines` im Eintrag. Ein Muster ohne CSVs wird gemeldet und übersprungen.
+**Datensätze** stehen in `configs/eval.yaml`: `kind: synthetic` (Generator) oder `kind: folder` mit Glob relativ zum Repo (`data/synthetic`, `data/dwd/*`, `data/challenge`). Ein Ordner enthält genau eine Leistungskurve (CSV ohne Zeitstempel) und Wind-CSVs nach S1; die Reihe, deren ID `target` enthält (Dateiname bzw. Spaltenkopf), ist das Ziel, alle anderen sind Referenzen. Für die Challenge also z. B. `data/challenge/target.csv`, `reference.csv`, `power_curve.csv`; `n_turbines` im Eintrag, optional `wind_scale` (multipliziert alle Reihen, siehe DWD unter „Externe Daten“). Ein Muster ohne CSVs wird gemeldet und übersprungen.
 
 **Aufruf:** `make harness`, oder `uv run python -m harness --models identity,lr --datasets demo,dwd [--holdout]`. Varianten (`variants:` in der Konfiguration) sind weitere Leaderboard-Zeilen aus einem registrierten Modell mit festen Parametern.
 
@@ -317,7 +329,7 @@ Empfehlung: externe Daten heute als realistische Testpaare für die Harness nutz
 | Schleswig ← Flensburg | 30 km | 0,81 | 2,8 / 3,6 m/s |
 | Dörpen ← Friesoythe | 41 km | 0,83 | 2,4 / 3,1 m/s |
 
-Vorbehalt: In 10 m Höhe liegt der Wind meist unter der Einschaltgeschwindigkeit der Nabenhöhen-Kurve (3 m/s). Energiemetriken der Binnenpaare beruhen deshalb auf wenigen windigen Stunden und sind relativ groß; Büsum ist das Paar, das Nabenhöhenwind am nächsten kommt. Die Mittelwerte unterscheiden sich je Paar um bis zu 25 %, ein Test dafür, ob Modelle den Versatz lernen.
+Vorbehalt: In 10 m Höhe liegt der Wind meist unter der Einschaltgeschwindigkeit der Nabenhöhen-Kurve (3 m/s). Deshalb skaliert die Harness die DWD-Paare mit `wind_scale: 1.38` in `configs/eval.yaml` (Potenzgesetz (100 m / 10 m)^0,14, auf Ziel und Referenz gleich), damit sie den steilen Teil der Leistungskurve treffen. Das ist ein Prüf-Proxy, kein Höhenprofil der Standorte; Energiemetriken der Binnenpaare bleiben relativ groß. Die Mittelwerte unterscheiden sich je Paar um bis zu 25 %, ein Test dafür, ob Modelle den Versatz lernen.
 
 **\[offen\]** Sind externe Daten laut Regeln erlaubt? Liegen Koordinaten, Nabenhöhen oder Turbinentypen vor?
 
@@ -355,7 +367,7 @@ Heute Abend steht die komplette Kette einmal durch, mit synthetischen Daten und 
 CLAUDE.md  SPEC.md  CHALLENGE.md  Makefile  pyproject.toml  uv.lock
 windgap/                    Python-Kern, Pyodide-kompatibel, einziger Inhalt des Wheels
   core/      schema.py  grid.py  powercurve.py  energy.py  metrics.py  io.py  (outage.py)
-  models/    CLAUDE.md  base.py  registry.py  identity.py  (linear.py  variance_ratio.py ...)
+  models/    CLAUDE.md  base.py  registry.py  identity.py  linear.py
   backtest.py               fold() + backtest(), gemeinsam für Engine-Validierung und Harness
   engine.py                 handle(request_json) -> response_json, list_models()
 harness/                    nur nativ: CLAUDE.md  __main__.py (CLI)  run.py (Szenarien, Leaderboard)  datasets.py  synthetic.py  fixtures.py  demo.py  dwd.py  (benchmarks/)
@@ -393,7 +405,8 @@ In Klammern: geplant, noch nicht angelegt. Leere Platzhalterdateien gibt es nich
 - [x] `assignFiles` (TS): mehrere Dateien auf einmal zuordnen (Leistungskurve, Reihen, Zielkandidaten); Ablagezone in der GUI folgt
 - [ ] Python-Ausfallerkennung (`windgap/core/outage.py`) für echte Daten in der Harness
 - [ ] PM: Build beider Varianten, GitHub-Pages-Deploy per GitHub Action
-- [ ] Mathe A: MCP-Grundlagen lesen (LR vs. VR), M0–M2 gegen das Interface S3, Erklärtexte, Fixture je Modell
+- [x] M0–M3 gegen S3 (`identity`, `linear_regression`, `variance_ratio`, Lag als Parameter), Erklärtexte, Fixtures, `ts`-Port; σ und Fehlergedächtnis kalibriert (`calibrate`), Energieband aus der Fehler-Autokorrelation (S4), `wind_scale` für DWD; Standardmodell der GUI `linear_regression`
+- [ ] M4 (Tageszeit), M5 (Bin-Modell), M7 (mehrere Referenzen) nur, wenn die Harness Gewinn zeigt
 - [x] Synthetik-Generator (`harness/synthetic.py`), Metriken (`windgap/core/metrics.py`), Backtest-Fold (`windgap/backtest.py`)
 - [x] Szenarien, `configs/eval.yaml`, Leaderboard-CLI (`make harness`), Kalibrierung des Energiebands (`energy_coverage_80`) und energiegewichtete Energieabweichung (`energy_wape_pct`)
 - [x] Leistungskurve und Erwartungswert der Leistung (S4), erste Version

@@ -12,7 +12,7 @@ type Params = Record<string, number | string>
 export function fold(model: string, params: Params, target: Float64Array, refs: Frame, curve: PowerCurve, start: number, end: number) {
   const fitted = create(model, params).fit(target.slice(0, start), rows(refs, 0, start))
   const pred = fitted.predict(rows(refs, start, end))
-  return { pred, metrics: evaluate(target.slice(start, end), pred, curve) }
+  return { pred, metrics: evaluate(target.slice(start, end), pred, curve, fitted.errors.acf) }
 }
 
 /** Summarized metrics over up to `nFolds` outages of `length` steps, tiled backwards from the end of `target`. */

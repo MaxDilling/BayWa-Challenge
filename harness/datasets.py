@@ -3,7 +3,8 @@ windgap.core.io (demo data, DWD pairs, the challenge data).
 
 Folder layout: one CSV without timestamps is the power curve (per turbine); every wind column of the other CSVs is
 a series. The series whose id contains "target" (file name, or column header in a multi-column file) is the
-target, all others are references in file order."""
+target, all others are references in file order. `wind_scale` in the entry multiplies every series (target and
+references alike), e.g. (100 m / 10 m)^0.14 ≈ 1.38 to lift 10 m station wind towards hub height."""
 
 from dataclasses import dataclass
 from pathlib import Path
@@ -34,8 +35,10 @@ def load(spec: dict) -> list[Pair]:
     if spec["kind"] == "folder":
         folders = sorted(f for f in ROOT.glob(spec["path"]) if any(f.glob("*.csv")))
         many = "*" in spec["path"]
-        return [read_folder(f"{spec['name']}/{f.name}" if many else spec["name"], f, spec.get("n_turbines", 1))
-                for f in folders]
+        scale = spec.get("wind_scale", 1.0)
+        pairs = [read_folder(f"{spec['name']}/{f.name}" if many else spec["name"], f, spec.get("n_turbines", 1))
+                 for f in folders]
+        return [Pair(p.name, p.target * scale, p.refs * scale, p.curve) for p in pairs]
     raise ValueError(f"unknown dataset kind {spec['kind']!r}")
 
 

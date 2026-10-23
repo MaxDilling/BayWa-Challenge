@@ -25,7 +25,7 @@ export function analyze(req: AnalyzeRequest): AnalyzeResponse {
   const trainRefs = rows(refs, 0, train)
   const model = create(req.model, params).fit(trainTarget, trainRefs)
   const pred = model.predict(refsOut)
-  const energy = energyLoss(expectedPower(pred, req.powerCurve))
+  const energy = energyLoss(expectedPower(pred, req.powerCurve), model.errors.acf)
   const explanation = model.explain()
 
   return {

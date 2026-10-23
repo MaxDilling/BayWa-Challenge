@@ -1,7 +1,7 @@
 // windgap/core/powercurve.py + energy.py
 import type { AnalyzeRequest } from '../contract'
 import { STEP_H } from './frame'
-import type { Prediction } from './models/base'
+import { Z90, type Prediction } from './models/base'
 
 export type PowerCurve = AnalyzeRequest['powerCurve']
 
@@ -22,29 +22,40 @@ export function parkPowerKw(curve: PowerCurve, v: number): number {
 
 export interface Power {
   pMeanKw: Float64Array
-  pQ10Kw: Float64Array
-  pQ90Kw: Float64Array
+  pStdKw: Float64Array
 }
 
-/** pMeanKw = E[P(v)] with v ~ N(mean, std²) via Gauss-Hermite quadrature, not P(mean). */
+/** pMeanKw = E[P(v)] and pStdKw = SD[P(v)] with v ~ N(mean, std²) via Gauss-Hermite quadrature; not P(mean). */
 export function expectedPower(pred: Prediction, curve: PowerCurve): Power {
-  return {
-    pMeanKw: pred.mean.map((m, i) =>
-      NODES.reduce((acc, node, k) => acc + parkPowerKw(curve, m + pred.std[i] * node) * WEIGHTS[k], 0),
-    ),
-    pQ10Kw: pred.q10.map((v) => parkPowerKw(curve, v)),
-    pQ90Kw: pred.q90.map((v) => parkPowerKw(curve, v)),
+  const n = pred.mean.length
+  const pMeanKw = new Float64Array(n)
+  const pStdKw = new Float64Array(n)
+  for (let i = 0; i < n; i++) {
+    let m1 = 0
+    let m2 = 0
+    NODES.forEach((node, k) => {
+      const p = parkPowerKw(curve, pred.mean[i] + pred.std[i] * node)
+      m1 += p * WEIGHTS[k]
+      m2 += p * p * WEIGHTS[k]
+    })
+    pMeanKw[i] = m1
+    pStdKw[i] = Math.sqrt(Math.max(m2 - m1 * m1, 0))
   }
+  return { pMeanKw, pStdKw }
 }
 
-/** Whole prediction window = the outage. P10/P90 sum the per-step quantiles (fully correlated errors). */
-export function energyLoss(power: Power) {
-  const kwh = (p: Float64Array) => p.reduce((s, x) => s + x * STEP_H, 0)
-  let acc = 0
-  return {
-    kwhP10: kwh(power.pQ10Kw),
-    kwhP50: kwh(power.pMeanKw),
-    kwhP90: kwh(power.pQ90Kw),
-    cumulativeKwh: Array.from(power.pMeanKw, (p) => (acc += p * STEP_H)),
+/** Whole prediction window = the outage. P50 ± Z90 · SD of the sum, power errors k steps apart correlated by acf[k]. */
+export function energyLoss(power: Power, acf: number[]) {
+  const s = power.pStdKw.map((p) => p * STEP_H)
+  let variance = 0
+  for (let k = 0; k < Math.min(acf.length, s.length); k++) {
+    let d = 0
+    for (let i = 0; i + k < s.length; i++) d += s[i] * s[i + k]
+    variance += (k ? 2 : 1) * acf[k] * d
   }
+  const half = Z90 * Math.sqrt(variance)
+  let acc = 0
+  const cumulativeKwh = Array.from(power.pMeanKw, (p) => (acc += p * STEP_H))
+  const kwhP50 = power.pMeanKw.reduce((sum, p) => sum + p * STEP_H, 0)
+  return { kwhP10: Math.max(kwhP50 - half, 0), kwhP50, kwhP90: kwhP50 + half, cumulativeKwh }
 }

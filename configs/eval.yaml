@@ -21,12 +21,16 @@ scenarios:
 
 # kind synthetic: harness/synthetic.py; kind folder: path glob relative to the repo, layout in harness/datasets.py.
 # A folder pattern without CSVs is reported and skipped (data/challenge/ stays empty until the data arrives).
+# wind_scale multiplies target and references alike: DWD measures at 10 m, where inland wind mostly stays below the
+# 3 m/s cut-in; the power law (100 m / 10 m)^0.14 ≈ 1.38 lifts it towards hub height so the pairs exercise the
+# steep part of the power curve. It is a proxy for testing, not a shear model of the sites.
 datasets:
   - {name: synthetic, kind: synthetic, days: 30, seed: 0}
   - {name: demo, kind: folder, path: data/synthetic}
-  - {name: dwd, kind: folder, path: "data/dwd/*"}
+  - {name: dwd, kind: folder, path: "data/dwd/*", wind_scale: 1.38}
   - {name: challenge, kind: folder, path: data/challenge, n_turbines: 1}
 
-# Extra leaderboard rows: a registered model with fixed params, e.g.
-#   identity_sigma2: {model: identity, params: {sigma: 2.0}}
-variants: {}
+# Extra leaderboard rows: a registered model with fixed params. Without the delay τ (M1 instead of M3), to show
+# what the lag search adds.
+variants:
+  linear_regression_nolag: {model: linear_regression, params: {lag_max_min: 0}}

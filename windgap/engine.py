@@ -46,7 +46,7 @@ def analyze(req: dict) -> dict:
     train = df.index < outage.start
     model = registry.create(name, **params).fit(target[train], refs[train])
     pred = model.predict(refs_out)
-    energy = energy_loss(expected_power(pred, curve), outage)
+    energy = energy_loss(expected_power(pred, curve), outage, model.errors.acf)
     explanation = model.explain()
 
     return {

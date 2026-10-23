@@ -1,11 +1,16 @@
 // windgap/models/registry.py: the ported subset, under the same names.
 import type { WindModel } from './base'
 import { Identity } from './identity'
+import { LinearRegression, VarianceRatio } from './linear'
 
 type Params = Record<string, number | string>
 
+const lagMax = (p: Params) => (p.lag_max_min === undefined ? undefined : Number(p.lag_max_min))
+
 const MODELS: Record<string, (p: Params) => WindModel> = {
-  identity: (p) => new Identity(p.sigma === undefined ? undefined : Number(p.sigma)),
+  identity: () => new Identity(),
+  linear_regression: (p) => new LinearRegression(lagMax(p)),
+  variance_ratio: (p) => new VarianceRatio(lagMax(p)),
 }
 
 export const names = () => Object.keys(MODELS).sort()

@@ -1,13 +1,14 @@
-import { Info } from 'lucide-react'
 import { observer } from 'mobx-react-lite'
 import { useCallback } from 'react'
 import { AnalysisState } from '@/components/AnalysisState'
 import { Chart, type ChartTheme } from '@/components/charts/Chart'
 import { byId, gridPoints, tooltipHtml } from '@/components/charts/series'
 import { fmtAxisTime, fmtDayTime, fmtDuration, fmtNum, fmtPct, fmtSpan, STEP_MS } from '@/components/format'
+import { Hint } from '@/components/Hint'
+import { BAND_HINT, headline, METRICS, verdict } from '@/components/metrics'
 import { Notice } from '@/components/Notice'
 import { Section } from '@/components/Section'
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { Warnings } from '@/components/Warnings'
 import type { Dataset, Span } from '@/data'
 import type { AnalyzeResponse } from '@/engine'
 import { store } from '@/state/store'
@@ -15,14 +16,23 @@ import { store } from '@/state/store'
 const HOUR = 3_600_000
 
 export const ResultsStep = observer(function ResultsStep() {
-  const { response, dataset, outage } = store
+  const { response, dataset, outage, warnings } = store
   if (!response || !dataset || !outage) return <AnalysisState />
   return (
     <div className="grid gap-section lg:grid-cols-12">
       <EnergyCard response={response} outage={outage} />
-      <AccuracyCard validation={response.validation} outage={outage} />
+      <AccuracyCard
+        validation={response.validation}
+        outage={outage}
+        farmKw={Math.max(...dataset.powerCurve.powerKw) * dataset.nTurbines}
+      />
       <WindCard dataset={dataset} response={response} outage={outage} />
       <EnergyCharts response={response} />
+      {warnings.length > 0 && (
+        <Section title="Data checks" description="Worth a look before the numbers are sent; they also go into the email." className="lg:col-span-12">
+          <Warnings items={warnings} />
+        </Section>
+      )}
     </div>
   )
 })
@@ -36,6 +46,10 @@ function EnergyCard({ response, outage }: { response: AnalyzeResponse; outage: S
       description={`${fmtDuration(outage.endMs - outage.startMs)} outage · ${fmtSpan(outage)}`}
       className="lg:col-span-4"
     >
+      <p className="text-pretty font-medium">
+        {headline(response.energy)}{' '}
+        <Hint label={<span className="sr-only">How the range is made</span>}>{BAND_HINT}</Hint>
+      </p>
       <p className="flex items-baseline gap-2">
         <span className="text-kpi font-semibold tabular-nums">{fmtNum(kwhP50)}</span>
         <span className="text-stat text-muted-foreground">kWh</span>
@@ -61,69 +75,34 @@ function EnergyCard({ response, outage }: { response: AnalyzeResponse; outage: S
   )
 }
 
-const METRICS: { key: string; label: string; format: (v: number) => string; hint: string }[] = [
-  {
-    key: 'energy_dev_pct',
-    label: 'Energy deviation',
-    format: (v) => `${fmtNum(v, 1)} %`,
-    hint: 'Deviation of the summed energy from the measured one, per simulated outage, as an absolute value.',
-  },
-  {
-    key: 'wind_rmse',
-    label: 'Wind RMSE',
-    format: (v) => `${fmtNum(v, 2)} m/s`,
-    hint: 'Root-mean-square error of the 10-minute wind speed.',
-  },
-  { key: 'wind_mae', label: 'Wind MAE', format: (v) => `${fmtNum(v, 2)} m/s`, hint: 'Mean absolute error of the 10-minute wind speed.' },
-  {
-    key: 'power_rmse',
-    label: 'Power RMSE',
-    format: (v) => `${fmtNum(v)} kW`,
-    hint: 'Root-mean-square error of the farm power per 10 minutes.',
-  },
-  {
-    key: 'coverage_80',
-    label: '80 % band coverage',
-    format: (v) => fmtPct(v, 0),
-    hint: 'Share of measured values inside the 80 % band; ideally 80 %.',
-  },
-  {
-    key: 'bias',
-    label: 'Bias',
-    format: (v) => `${v > 0 ? '+' : ''}${fmtNum(v, 2)} m/s`,
-    hint: 'Mean wind error. A bias does not average out, so it drives the energy sum.',
-  },
-]
+const CARDS = ['energy_wape_pct', 'wind_rmse', 'wind_mae', 'power_rmse', 'coverage_80', 'bias'].map((key) => METRICS[key])
 
-function AccuracyCard({ validation, outage }: { validation: Record<string, number>; outage: Span }) {
+function AccuracyCard({ validation, outage, farmKw }: { validation: Record<string, number>; outage: Span; farmKw: number }) {
   const folds = validation.n_folds
+  const sentence = verdict(validation, outage.endMs - outage.startMs)
   return (
     <Section
       title="Accuracy"
-      description={
-        folds
-          ? `Backtest on your data: ${fmtNum(folds)} simulated outages of ${fmtDuration(outage.endMs - outage.startMs)} before this one, compared with the measurements.`
-          : undefined
-      }
+      description={folds ? 'Backtest on your data: simulated outages of the same length before this one, compared with the measurements.' : undefined}
       className="lg:col-span-8"
     >
       {folds ? (
-        <dl className="grid grid-cols-2 gap-3 md:grid-cols-3">
-          {METRICS.map((m) => (
-            <div key={m.key} className="rounded-lg bg-muted px-3 py-2.5">
-              <dt className="flex items-center gap-1 text-label text-muted-foreground">
-                {m.label}
-                <Tooltip>
-                  <TooltipTrigger aria-label={`About ${m.label}`}>
-                    <Info className="size-3.5" />
-                  </TooltipTrigger>
-                  <TooltipContent className="max-w-64">{m.hint}</TooltipContent>
-                </Tooltip>
-              </dt>
-              <dd className="text-stat font-semibold tabular-nums">{m.key in validation ? m.format(validation[m.key]) : 'n/a'}</dd>
-            </div>
-          ))}
-        </dl>
+        <>
+          {sentence && <p className="text-pretty">{sentence}</p>}
+          <dl className="grid grid-cols-2 gap-3 md:grid-cols-3">
+            {CARDS.map((m) => (
+              <div key={m.key} className="rounded-lg bg-muted px-3 py-2.5">
+                <dt className="text-label text-muted-foreground">
+                  <Hint label={m.label}>{m.hint}</Hint>
+                </dt>
+                <dd className="text-stat font-semibold tabular-nums">{m.key in validation ? m.format(validation[m.key]) : 'n/a'}</dd>
+                {m.key === 'power_rmse' && m.key in validation && farmKw > 0 && (
+                  <dd className="text-label text-muted-foreground tabular-nums">{fmtPct(validation.power_rmse / farmKw, 0)} of rated farm power</dd>
+                )}
+              </div>
+            ))}
+          </dl>
+        </>
       ) : (
         <Notice tone="empty" title="No backtest possible">
           There is not enough data before the outage to simulate an outage of the same length, so accuracy cannot be measured.

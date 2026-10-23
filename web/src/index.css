@@ -96,9 +96,9 @@
     --series-reference: var(--blue-500);
     --series-prediction: var(--brand-600);
     --series-band: var(--brand-400);
-    --series-outage: var(--red-100);
-    --series-outage-edge: var(--red-400);
-    --series-gap: var(--neutral-200);
+    --series-outage: var(--neutral-200);
+    --series-outage-edge: var(--neutral-400);
+    --series-gap: var(--neutral-300);
     --series-energy: var(--amber-500);
 
     /* Chart geometry (unitless numbers are pixels for ECharts) */
@@ -163,9 +163,9 @@
     --series-reference: var(--blue-400);
     --series-prediction: var(--brand-400);
     --series-band: var(--brand-300);
-    --series-outage: var(--red-950);
-    --series-outage-edge: var(--red-500);
-    --series-gap: var(--neutral-800);
+    --series-outage: var(--neutral-800);
+    --series-outage-edge: var(--neutral-400);
+    --series-gap: var(--neutral-700);
     --series-energy: var(--amber-400);
 
     --chart-grid: var(--neutral-800);

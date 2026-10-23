@@ -289,15 +289,17 @@ Prozentwerte fehlen in Szenarien ohne echte Energie (Flaute). Über Szenarien fa
 
 Die GUI führt in fünf Schritten von den Dateien zur kWh-Zahl. Jede Pflichtanforderung der Aufgabe hat einen festen Platz. Sprache der Oberfläche: Englisch, weil die Challenge auf Englisch gestellt ist. **\[offen\]** Sprache der Jury.
 
-1. **Upload:** Drag-and-drop für Ziel, Referenz(en) und Leistungskurve; Button „Load demo data“. Sofortige Prüfung mit Datenqualität (Zeitraum, Anzahl Werte, Lücken, Korrelation).
+1. **Upload:** eine Ablagezone für alle Dateien (`assignFiles`, Zuordnung sichtbar und korrigierbar, bei mehreren Zielkandidaten „Which farm had the outage?“), darunter je eine Zone für Ziel, Referenz(en) und Leistungskurve zum Korrigieren; Button „Load demo data“. Sofortige Prüfung mit Datenqualität (Zeitraum, Anzahl Werte, Lücken, Korrelation).
 2. **Outage:** Zeitreihen beider Parks übereinander, erkannter Ausfall farbig hinterlegt. Start und Ende per Ziehen oder Datumsfeld anpassen.
-3. **Method:** Modellauswahl mit Empfehlung, Formel, zwei Sätzen Erklärung, Streudiagramm Ziel gegen Referenz mit Modellgerade, gelernte Parameter, Korrelation r.
-4. **Results:** vorhergesagter Wind mit 80-%-Band im Ausfall, angrenzende echte Messungen davor und danach; Kennzahlenkarten mit Genauigkeit aus dem Backtest; Energieverlust in kWh mit P10/P50/P90; kumulierte Verlustkurve und Leistung je Zeitschritt.
-5. **Export:** CSV der Vorhersage, Bericht als E-Mail-Entwurf zum Kopieren (Bonus 1).
+3. **Method:** Vergleichstabelle aller Modelle auf den Daten des Nutzers (je Modell ein `analyze`: Energiefehler `energy_wape_pct`, Wind-RMSE, Abdeckung des 80-%-Bands, kWh mit Spanne), Empfehlung aus `ModelInfo.recommended`, Auswahl per Zeile; Formel, zwei Sätze Erklärung, Streudiagramm Ziel gegen Referenz (um τ verschoben) mit Modellgerade, gelernte Parameter mit verständlichen Namen und Erklärung, Korrelation r.
+4. **Results:** Kopfsatz für Versicherungen („Most likely … kWh; with 80 % probability between … and … kWh.“) mit Erklärung des Bands (S4); vorhergesagter Wind mit 80-%-Band im Ausfall, angrenzende echte Messungen davor und danach; Kennzahlenkarten mit Genauigkeit aus dem Backtest und einem Satz, der nur aus `validation` gebildet wird; Energieverlust in kWh mit P10/P50/P90; kumulierte Verlustkurve und Leistung je Zeitschritt; Liste der Plausibilitätswarnungen.
+5. **Export:** CSV der Vorhersage (Dateiname mit Modell-ID), Bericht als E-Mail-Entwurf zum Kopieren (Bonus 1) mit Modellname, Kopfsatz, Warnungen und Version.
+
+**Plausibilitätswarnungen** (`plausibility` in `web/src/data/checks.ts`, angezeigt im Schritt, in dem sie zählen, gesammelt in Results und E-Mail): Korrelation r < 0,7 (aus `diagnostics.r`), überbrückte Referenzlücken im Ausfall (Anzahl), weniger als 5 Tage Zieldaten vor dem Ausfall, Ausfall bis zum Ende der Zieldaten, Nennleistung je Turbine < 100 kW oder > 20 MW bzw. nie > 0, Ziel und Referenz identisch. Warnungen sind Hinweise, keine Fehler.
 
 | Pflicht laut Aufgabe | Wo in der GUI |
 | --- | --- |
-| Accuracy metrics | Schritt 4, Kennzahlenkarten (RMSE, MAE, Energieabweichung, Abdeckung) mit Hinweis „aus Backtest auf euren Daten“ |
+| Accuracy metrics | Schritt 4, Kennzahlenkarten (Energiefehler `energy_wape_pct`, RMSE, MAE, Leistungs-RMSE auch in % der Parknennleistung, Abdeckung, Bias) mit Hinweis „aus Backtest auf euren Daten“ |
 | Wind speed visualization | Schritt 4, Zeitreihe mit Band |
 | Prediction method | Schritt 3, Formel, Erklärung, Streudiagramm, Vergleich mit Alternativmodellen aus der Harness |
 | Energy loss calculation | Schritt 4, große kWh-Zahl mit Spanne |

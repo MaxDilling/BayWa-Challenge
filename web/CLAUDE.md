@@ -4,7 +4,7 @@ Vite, React, TypeScript, shadcn/ui (Preset Nova, Radix), Tailwind v4, ECharts, M
 
 ## Regeln
 
-- **Die GUI kennt nur `Engine` aus `src/engine/contract.ts`.** Kein Modell- oder Energiewissen in Komponenten. CSV-Export und Berichtstext baut die GUI aus der `AnalyzeResponse`.
+- **Die GUI kennt nur `Engine` aus `src/engine/contract.ts`.** Kein Modell- oder Energiewissen in Komponenten. CSV-Export und Berichtstext baut die GUI aus der `AnalyzeResponse`. Modellnamen kommen als `label` aus `ModelInfo`, nie aus der GUI; die ID (`name`) nur in Anfragen und Dateinamen. Datenprüfungen, die die Engine nicht macht, gehören nach `src/data/checks.ts`, nicht in Komponenten.
 - **`ts`-Engine ist ein Port, keine eigene Methode.** Jede Formel entspricht 1:1 der Python-Funktion gleichen Namens, und die Golden-Fixtures müssen auf 1e-6 stimmen. Ohne Fixture gibt es kein TS-Modell.
 - **Import (`src/data/`) liefert bereinigte Arrays.** Zeit intern in UTC (Epoch-Millisekunden); Europe/Berlin nur beim Einlesen und Anzeigen. Referenzlücken im Ausfall werden hier gefüllt und markiert, weil die Engine vollständige Referenzen verlangt. Die Regeln stehen in SPEC.md S1; `windgap/core/io.py` ist der Python-Zwilling. Jede Regeländerung an beiden Seiten und mit einem Fall in `fixtures/csv/`. `parseWindCsv` liefert eine Reihe je Windspalte; `assignFiles` ordnet mehrere Dateien auf einmal zu.
 - **Der Build `--mode single` darf den `py`-Pfad nicht enthalten.** Pyodide nur per dynamischem Import hinter `import.meta.env.MODE !== 'single'` laden. Pyodide wird nie gebündelt: Der Worker lädt es zur Laufzeit aus `public/pyodide/` (relativ zur Seite, damit GitHub Pages unter einem Unterpfad funktioniert). Kein CDN.

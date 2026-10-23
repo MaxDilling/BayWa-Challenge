@@ -1,57 +1,70 @@
-import { CircleCheck } from 'lucide-react'
 import { observer } from 'mobx-react-lite'
 import { useCallback } from 'react'
 import { AnalysisState } from '@/components/AnalysisState'
 import { Chart, type ChartTheme } from '@/components/charts/Chart'
-import { fmtNum } from '@/components/format'
+import { fmtDuration, fmtNum } from '@/components/format'
 import { Formula } from '@/components/Formula'
+import { Hint } from '@/components/Hint'
+import { METRICS } from '@/components/metrics'
 import { Section } from '@/components/Section'
+import { Warnings } from '@/components/Warnings'
 import { Badge } from '@/components/ui/badge'
-import type { AnalyzeResponse } from '@/engine'
+import type { AnalyzeResponse, ModelInfo } from '@/engine'
 import { cn } from '@/lib/utils'
 import { store } from '@/state/store'
 
-/** Names and units for the keys of `params` and `diagnostics`; other keys are shown as they come. */
-const KEYS: Record<string, { label: string; unit?: string; digits: number }> = {
-  a: { label: 'Intercept a', unit: 'm/s', digits: 2 },
-  b: { label: 'Slope b', digits: 3 },
-  r: { label: 'Correlation r', digits: 3 },
-  lag_min: { label: 'Delay τ', unit: 'min', digits: 0 },
-  n_train: { label: 'Training pairs', unit: '× 10 min', digits: 0 },
-  sigma_0: { label: 'Spread σ in calm', unit: 'm/s', digits: 2 },
-  sigma_slope: { label: 'Spread σ growth per m/s of wind', digits: 3 },
-  error_memory_h: { label: 'Error memory', unit: 'h', digits: 1 },
+/** Plain names, units and explanations for the keys of `params` and `diagnostics`; other keys are shown as they come. */
+const KEYS: Record<string, { label: string; unit?: string; digits: number; hint: string }> = {
+  a: { label: 'Intercept a', unit: 'm/s', digits: 2, hint: 'Where the line starts: the predicted target wind when the reference is calm.' },
+  b: { label: 'Slope b', digits: 3, hint: 'How much the target wind changes per 1 m/s of reference wind.' },
+  r: { label: 'Correlation r', digits: 3, hint: 'How closely target and reference move together before the outage; 1 is perfect, below 0.7 is weak.' },
+  lag_min: {
+    label: 'Delay τ',
+    unit: 'min',
+    digits: 0,
+    hint: 'How long the weather takes from one farm to the other. The model reads the reference this much earlier (later if negative).',
+  },
+  n_train: { label: 'Training values', unit: '× 10 min', digits: 0, hint: '10-minute values before the outage where both farms measured.' },
+  sigma_0: {
+    label: 'Uncertainty in calm wind',
+    unit: 'm/s',
+    digits: 2,
+    hint: 'Width σ of the uncertainty at 0 m/s, measured on training data the model had not seen. The 80 % band is ±1.28 σ.',
+  },
+  sigma_slope: {
+    label: 'Uncertainty growth',
+    unit: 'm/s per m/s',
+    digits: 3,
+    hint: 'How much σ grows per 1 m/s of predicted wind: errors are larger in strong wind.',
+  },
+  error_memory_h: {
+    label: 'How long errors persist',
+    unit: 'h',
+    digits: 1,
+    hint: 'If the model is too high now, it tends to stay too high for about this long. The longer, the less errors cancel over an outage and the wider the energy range.',
+  },
 }
 
+const COMPARED = [METRICS.energy_wape_pct, METRICS.wind_rmse, METRICS.coverage_80]
+
 export const MethodStep = observer(function MethodStep() {
-  const { response, models, model } = store
+  const { response, warnings } = store
+  const relevant = warnings.filter((w) => w.step === 'method')
   return (
     <div className="grid gap-section lg:grid-cols-12">
-      <Section title="Model" description="Every model is explained by one formula and two sentences." className="lg:col-span-4">
-        <div className="flex flex-col gap-2" role="radiogroup" aria-label="Model">
-          {models.map((name) => (
-            <button
-              key={name}
-              type="button"
-              role="radio"
-              aria-checked={name === model}
-              onClick={() => store.selectModel(name)}
-              className={cn(
-                'flex items-center justify-between rounded-lg border px-3 py-2 text-left font-medium transition-colors hover:border-primary',
-                name === model && 'border-primary bg-accent text-accent-foreground',
-              )}
-            >
-              {name}
-              {name === model && <CircleCheck className="size-4 text-primary" />}
-            </button>
-          ))}
+      <Comparison />
+      {relevant.length > 0 && (
+        <div className="flex flex-col gap-3 lg:col-span-12">
+          <Warnings items={relevant} />
         </div>
-        {response && <Explanation response={response} />}
-      </Section>
+      )}
       {response ? (
-        <ScatterCard response={response} />
+        <>
+          <Explanation response={response} />
+          <ScatterCard response={response} />
+        </>
       ) : (
-        <div className="lg:col-span-8">
+        <div className="lg:col-span-12">
           <AnalysisState />
         </div>
       )}
@@ -59,32 +72,104 @@ export const MethodStep = observer(function MethodStep() {
   )
 })
 
+const Comparison = observer(function Comparison() {
+  const { models, model, results, failures, outage } = store
+  const folds = Object.values(results)[0]?.validation.n_folds
+  return (
+    <Section
+      title="Methods on your data"
+      description={
+        outage && folds
+          ? `Each method predicted ${fmtNum(folds)} simulated ${fmtDuration(outage.endMs - outage.startMs)} outages before this one; lower errors are better. Select a row to use that method.`
+          : 'Select a row to use that method.'
+      }
+      className="lg:col-span-12"
+    >
+      <div className="overflow-x-auto">
+        <table className="w-full text-left tabular-nums" role="radiogroup" aria-label="Method">
+          <thead className="text-label text-muted-foreground">
+            <tr className="border-b">
+              <th className="py-2 pr-3 font-medium">Method</th>
+              {COMPARED.map((m) => (
+                <th key={m.key} className="px-3 py-2 text-right font-medium whitespace-nowrap">
+                  <Hint label={m.label}>{m.hint}</Hint>
+                </th>
+              ))}
+              <th className="py-2 pl-3 text-right font-medium whitespace-nowrap">Lost energy (10–90 %)</th>
+            </tr>
+          </thead>
+          <tbody>
+            {models.map((info) => (
+              <ModelRow key={info.name} info={info} selected={info.name === model} response={results[info.name]} failure={failures[info.name]} />
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </Section>
+  )
+})
+
+function ModelRow({ info, selected, response, failure }: { info: ModelInfo; selected: boolean; response?: AnalyzeResponse; failure?: string }) {
+  const cell = (text: string) => <td className="px-3 py-2.5 text-right whitespace-nowrap">{text}</td>
+  const pending = failure ? 'failed' : '…'
+  return (
+    <tr
+      role="radio"
+      aria-checked={selected}
+      tabIndex={0}
+      onClick={() => store.selectModel(info.name)}
+      onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && store.selectModel(info.name)}
+      className={cn('cursor-pointer border-b transition-colors last:border-0 hover:bg-muted', selected && 'bg-accent text-accent-foreground hover:bg-accent')}
+    >
+      <td className="py-2.5 pr-3">
+        <span className="flex flex-wrap items-center gap-2">
+          <span className={cn('size-3 shrink-0 rounded-full border border-input', selected && 'border-4 border-primary')} aria-hidden />
+          <span className="font-medium">{info.label}</span>
+          {info.recommended && <Badge>Recommended</Badge>}
+        </span>
+        <span className="hidden pl-5 text-label text-muted-foreground sm:block">
+          {info.tagline}
+          {info.recommended && ' Lowest error on our benchmark of 7 datasets.'}
+        </span>
+      </td>
+      {COMPARED.map((m) => cell(response ? (m.key in response.validation ? m.format(response.validation[m.key]) : 'n/a') : pending))}
+      {cell(
+        response
+          ? `${fmtNum(response.energy.kwhP50)} kWh (${fmtNum(response.energy.kwhP10)}–${fmtNum(response.energy.kwhP90)})`
+          : pending,
+      )}
+    </tr>
+  )
+}
+
 function Explanation({ response }: { response: AnalyzeResponse }) {
   const { formula, summary, params, diagnostics } = response.explanation
   const rows = Object.entries({ ...params, ...diagnostics })
   return (
-    <>
+    <Section title={store.label(store.model)} className="lg:col-span-4">
       <Formula tex={formula} />
       <p className="text-pretty">{summary}</p>
       <dl className="grid grid-cols-[1fr_auto] gap-x-4 gap-y-1 border-t pt-3 text-label">
         {rows.map(([key, value]) => {
-          const meta = KEYS[key] ?? { label: key, digits: 3 }
+          const meta = KEYS[key]
           return (
             <div key={key} className="contents">
-              <dt className="text-muted-foreground">{meta.label}</dt>
+              <dt className="text-muted-foreground">{meta ? <Hint label={meta.label}>{meta.hint}</Hint> : key}</dt>
               <dd className="text-right font-medium tabular-nums">
-                {fmtNum(value, meta.digits)}
-                {meta.unit && ` ${meta.unit}`}
+                {fmtNum(value, meta?.digits ?? 3)}
+                {meta?.unit && ` ${meta.unit}`}
               </dd>
             </div>
           )
         })}
       </dl>
-    </>
+    </Section>
   )
 }
 
-function scatterOption({ scatter }: AnalyzeResponse, t: ChartTheme) {
+function scatterOption({ scatter, explanation }: AnalyzeResponse, t: ChartTheme) {
+  const lag = explanation.diagnostics.lag_min ?? 0
+  const reference = lag ? `Reference wind ${fmtNum(Math.abs(lag))} min ${lag > 0 ? 'earlier' : 'later'} (m/s)` : 'Reference wind (m/s)'
   const max = Math.ceil(Math.max(...scatter.ref, ...scatter.target, 1))
   return {
     legend: {},
@@ -93,7 +178,7 @@ function scatterOption({ scatter }: AnalyzeResponse, t: ChartTheme) {
       formatter: ({ seriesName, value }: { seriesName: string; value: [number, number] }) =>
         `<div class="text-label"><div class="font-medium">${seriesName}</div>Reference ${fmtNum(value[0], 2)} m/s · target ${fmtNum(value[1], 2)} m/s</div>`,
     },
-    xAxis: { type: 'value', name: 'Reference wind (m/s)', nameLocation: 'middle', nameGap: t.label * 2, min: 0, max },
+    xAxis: { type: 'value', name: reference, nameLocation: 'middle', nameGap: t.label * 2, min: 0, max },
     yAxis: { type: 'value', name: 'Target wind (m/s)', nameLocation: 'middle', nameGap: t.label * 2.5, min: 0, max },
     grid: { left: t.label * 2, bottom: t.label * 2 },
     series: [
@@ -132,7 +217,7 @@ function ScatterCard({ response }: { response: AnalyzeResponse }) {
   return (
     <Section
       title="Target against reference"
-      description="Each point is one 10-minute pair from before the outage; the model line is what it predicts for each reference wind speed."
+      description="Each point is one 10-minute pair from before the outage, with the reference shifted by the delay τ, as the model sees it. The line is what the model predicts for each reference wind speed."
       action={
         r !== undefined && (
           <Badge variant="secondary" className="tabular-nums">

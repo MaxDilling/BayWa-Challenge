@@ -1,29 +1,28 @@
-import { Sparkles, X } from 'lucide-react'
+import { Check, X } from 'lucide-react'
 import { observer } from 'mobx-react-lite'
 import { useCallback, useState, type ReactNode } from 'react'
 import { Chart, type ChartTheme } from '@/components/charts/Chart'
-import { DropZone } from '@/components/DropZone'
+import { DropZone, FileDrop, FileError } from '@/components/DropZone'
 import { fmtDateTime, fmtNum, fmtPct, STEP_MS } from '@/components/format'
+import { Section } from '@/components/Section'
+import { Warnings } from '@/components/Warnings'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { loadDemo, parsePowerCurveCsv, parseWindCsv, type PowerCurve, type WindSeries } from '@/data'
+import { assignFiles, loadDemo, parsePowerCurveCsv, parseWindCsv, type PowerCurve, type WindSeries } from '@/data'
 import { store } from '@/state/store'
 
 const WIND_HINT = 'CSV with a timestamp (Europe/Berlin) and the 10-minute wind speed in m/s.'
 
 export const UploadStep = observer(function UploadStep() {
-  const { target, references, powerCurve, response } = store
+  const { target, references, powerCurve, response, warnings } = store
   const r = response?.explanation.diagnostics.r
   return (
     <div className="flex flex-col gap-section">
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-primary/30 bg-accent px-card py-3 text-accent-foreground">
-        <span className="flex items-center gap-2">
-          <Sparkles className="size-4" />
-          No files at hand? The demo has one month of 10-minute data, one reference farm and a 30 h outage.
-        </span>
-        <Button onClick={() => store.loadDataset(loadDemo())}>Load demo data</Button>
-      </div>
+      <AllFiles />
+      <Warnings items={warnings.filter((w) => w.step === 'upload')} />
+      <h3 className="font-medium">Or add and correct files one role at a time</h3>
       <div className="grid gap-section lg:grid-cols-3">
         <DropZone
           title="Target farm"
@@ -65,6 +64,83 @@ export const UploadStep = observer(function UploadStep() {
         </DropZone>
       </div>
     </div>
+  )
+})
+
+async function assignDropped(files: File[]) {
+  store.assign(assignFiles(await Promise.all(files.map(async (f) => ({ name: f.name, text: await f.text() })))))
+}
+
+const AllFiles = observer(function AllFiles() {
+  const { assignment } = store
+  return (
+    <Section
+      title="All files at once"
+      description="Drop the target, the reference(s) and the power curve together. The power curve is the file without timestamps; the target is the series with the outage."
+      action={<Button onClick={() => store.loadDataset(loadDemo())}>Load demo data</Button>}
+    >
+      <FileDrop multiple onFiles={assignDropped} className="gap-2 py-8 text-body">
+        Drop all files here (target, reference(s), power curve) or <span className="font-medium text-primary">browse</span>
+      </FileDrop>
+      {assignment ? (
+        <AssignmentView />
+      ) : (
+        <p className="text-label text-muted-foreground">
+          No files at hand? The demo has one month of 10-minute data, one reference farm and a 30 h outage.
+        </p>
+      )}
+    </Section>
+  )
+})
+
+const AssignmentView = observer(function AssignmentView() {
+  const { assignment, target, powerCurve } = store
+  const { series, targetCandidates, errors } = assignment!
+  const chosen = series.find((s) => s.id === target?.id)
+  const ask = !chosen && series.length > 1
+  return (
+    <>
+      {ask && (
+        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-primary bg-accent px-3 py-2.5 text-accent-foreground">
+          <span className="font-medium">Which farm had the outage?</span>
+          {(targetCandidates.length ? targetCandidates : series.map((s) => s.id)).map((id) => (
+            <Button key={id} size="sm" variant="outline" onClick={() => store.chooseTarget(id)}>
+              {id}
+            </Button>
+          ))}
+        </div>
+      )}
+      <ul className="flex flex-col divide-y rounded-lg border text-label">
+        {series.map((s) => (
+          <li key={s.id} className="flex items-center justify-between gap-3 px-3 py-2">
+            <span className="truncate font-medium">{s.id}</span>
+            {s === chosen ? (
+              <Badge>Target</Badge>
+            ) : (
+              <span className="flex items-center gap-2">
+                {chosen && <Badge variant="secondary">Reference</Badge>}
+                <Button size="xs" variant="ghost" onClick={() => store.chooseTarget(s.id)}>
+                  Make target
+                </Button>
+              </span>
+            )}
+          </li>
+        ))}
+        <li className="flex items-center justify-between gap-3 px-3 py-2">
+          <span className="font-medium">Power curve</span>
+          {assignment!.powerCurve ? (
+            <Badge variant="secondary">
+              <Check /> found
+            </Badge>
+          ) : (
+            <span className="text-muted-foreground">{powerCurve ? 'kept from before' : 'not among the files; add it below'}</span>
+          )}
+        </li>
+      </ul>
+      {errors.map((e) => (
+        <FileError key={e.file} {...e} />
+      ))}
+    </>
   )
 })
 

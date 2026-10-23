@@ -8,6 +8,7 @@ import { byId, gridPoints, tooltipHtml } from '@/components/charts/series'
 import { fmtDayTime, fmtDuration, fmtNum, fromLocalInput, STEP_MS, toLocalInput } from '@/components/format'
 import { Notice } from '@/components/Notice'
 import { Section } from '@/components/Section'
+import { Warnings } from '@/components/Warnings'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -18,7 +19,7 @@ import { store } from '@/state/store'
 const same = (a?: Span, b?: Span) => a?.startMs === b?.startMs && a?.endMs === b?.endMs
 
 export const OutageStep = observer(function OutageStep() {
-  const { dataset, outage, status, error } = store
+  const { dataset, outage, status, error, warnings } = store
   if (!dataset) return <AnalysisState />
   return (
     <div className="flex flex-col gap-section">
@@ -72,6 +73,7 @@ export const OutageStep = observer(function OutageStep() {
         <Timeline dataset={dataset} outage={outage} />
         {outage && <PeriodFields outage={outage} />}
       </Section>
+      <Warnings items={warnings.filter((w) => w.step === 'outage')} />
       {status === 'error' && (
         <Alert variant="destructive" className="bg-destructive-soft">
           <CircleAlert />
@@ -116,7 +118,6 @@ function timelineOption(dataset: Dataset, t: ChartTheme) {
       xAxisIndex: 0,
       brushType: 'lineX',
       brushMode: 'single',
-      toolbox: [],
       transformable: true,
       outOfBrush: { colorAlpha: 1 },
       brushStyle: { color: color.modifyAlpha(t.outageEdge, t.bandOpacity), borderColor: t.outageEdge, borderWidth: t.lineThin },

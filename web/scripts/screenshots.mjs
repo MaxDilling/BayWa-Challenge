@@ -1,4 +1,4 @@
-// Screenshots of every GUI step for review: desktop, mobile, dark, an upload error and the py engine.
+// Screenshots of every GUI step for review: desktop, mobile, dark, an upload error, all demo files dropped at once and the py engine.
 // Usage (after make build): node web/scripts/screenshots.mjs [outDir]. Exits 1 on any console error.
 import { spawn } from 'node:child_process'
 import { mkdirSync, rmSync } from 'node:fs'
@@ -56,6 +56,10 @@ const empty = await open('empty', single, DESKTOP)
 await shot(empty, 'empty.png')
 await empty.locator('input[type=file]').first().setInputFiles(join(root, 'fixtures/csv/spring_nonexistent.csv'))
 await shot(empty, 'upload-error.png')
+const demo = ['target', 'reference', 'power_curve'].map((f) => join(root, `data/synthetic/demo_${f}.csv`))
+await empty.locator('input[type=file]').first().setInputFiles(demo)
+await empty.getByText('kWh lost').waitFor({ state: 'attached' })
+await shot(empty, 'upload-all-files.png')
 await empty.close()
 
 await variant('desktop', single, DESKTOP)

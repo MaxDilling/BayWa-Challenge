@@ -5,7 +5,6 @@ import {
   GridComponent,
   LegendComponent,
   MarkAreaComponent,
-  ToolboxComponent,
   TooltipComponent,
 } from 'echarts/components'
 import { init, use, type ECharts, type EChartsCoreOption } from 'echarts/core'
@@ -23,7 +22,6 @@ use([
   LegendComponent,
   MarkAreaComponent,
   BrushComponent,
-  ToolboxComponent,
   DataZoomComponent,
   CanvasRenderer,
 ])

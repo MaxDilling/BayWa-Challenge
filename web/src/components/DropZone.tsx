@@ -17,8 +17,6 @@ interface Props<T> {
 
 /** Drop or browse CSV files; import errors are shown here, at the zone they belong to. */
 export function DropZone<T>({ title, hint, multiple, read, onRead, action, children }: Props<T>) {
-  const input = useRef<HTMLInputElement>(null)
-  const [over, setOver] = useState(false)
   const [error, setError] = useState<{ file: string; message: string }>()
 
   async function load(files: File[]) {
@@ -37,6 +35,31 @@ export function DropZone<T>({ title, hint, multiple, read, onRead, action, child
 
   return (
     <Section title={title} description={hint} action={action}>
+      <FileDrop multiple={multiple} onFiles={load}>
+        Drop CSV {multiple ? 'files' : 'file'} here or <span className="font-medium text-primary">browse</span>
+      </FileDrop>
+      {error && <FileError {...error} />}
+      {children}
+    </Section>
+  )
+}
+
+export function FileError({ file, message }: { file: string; message: string }) {
+  return (
+    <Alert variant="destructive" className="bg-destructive-soft">
+      <CircleAlert />
+      <AlertTitle>Could not read {file}</AlertTitle>
+      <AlertDescription>{message}</AlertDescription>
+    </Alert>
+  )
+}
+
+/** The drop target with a hidden file input behind it. */
+export function FileDrop({ multiple, onFiles, className, children }: { multiple?: boolean; onFiles: (files: File[]) => void; className?: string; children: ReactNode }) {
+  const input = useRef<HTMLInputElement>(null)
+  const [over, setOver] = useState(false)
+  return (
+    <>
       <button
         type="button"
         onClick={() => input.current?.click()}
@@ -48,17 +71,16 @@ export function DropZone<T>({ title, hint, multiple, read, onRead, action, child
         onDrop={(e) => {
           e.preventDefault()
           setOver(false)
-          load([...e.dataTransfer.files])
+          onFiles([...e.dataTransfer.files])
         }}
         className={cn(
           'flex w-full flex-col items-center gap-1 rounded-lg border border-dashed border-input p-card-sm text-label text-muted-foreground transition-colors hover:border-primary hover:bg-accent',
           over && 'border-primary bg-accent text-accent-foreground',
+          className,
         )}
       >
         <FileUp className="size-5 text-primary" />
-        <span>
-          Drop CSV {multiple ? 'files' : 'file'} here or <span className="font-medium text-primary">browse</span>
-        </span>
+        <span>{children}</span>
       </button>
       <input
         ref={input}
@@ -67,18 +89,10 @@ export function DropZone<T>({ title, hint, multiple, read, onRead, action, child
         multiple={multiple}
         hidden
         onChange={(e) => {
-          load([...(e.target.files ?? [])])
+          onFiles([...(e.target.files ?? [])])
           e.target.value = ''
         }}
       />
-      {error && (
-        <Alert variant="destructive" className="bg-destructive-soft">
-          <CircleAlert />
-          <AlertTitle>Could not read {error.file}</AlertTitle>
-          <AlertDescription>{error.message}</AlertDescription>
-        </Alert>
-      )}
-      {children}
-    </Section>
+    </>
   )
 }

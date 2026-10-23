@@ -47,7 +47,7 @@ function stepStatus(step: Step): string {
   if (step === 'upload') return dataset ? `${1 + dataset.references.length} series · power curve` : 'Add files'
   if (!dataset) return '—'
   if (step === 'outage') return outage ? fmtDuration(outage.endMs - outage.startMs) : 'Select a period'
-  if (step === 'method') return model
+  if (step === 'method') return store.label(model)
   if (status === 'running') return 'Calculating…'
   if (step === 'results') return response ? `${fmtNum(response.energy.kwhP50)} kWh lost` : status === 'error' ? 'Not available' : '—'
   return response ? 'CSV · email' : '—'

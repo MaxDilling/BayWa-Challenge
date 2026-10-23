@@ -100,4 +100,5 @@ Asset-Manager: Die Kennzahlen müssen in Sekunden lesbar sein, die Methode in ei
 Erst Tokens und ECharts-Wrapper, dann Store und Shell, dann Results, Method, Outage, Upload, Export. Alle
 Befehle im Projektordner. Nach jedem Schritt: `make test` und `make build` grün, Token-Prüfung (grep oben) leer,
 Ansicht mit `make dev` im Browser prüfen (beide Engines, `?engine=ts`), `dist/windgap.html` per Doppelklick
-öffnen und `make serve` für die Ordner-Variante (http://localhost:8000). Nicht committen, bis wir es sagen.
+öffnen und `make serve` für die Ordner-Variante (http://localhost:8000). Danach `make screenshots` und jedes Bild in
+`screenshots/` ansehen (Desktop, Handy, dunkel, Fehler, py): Überlauf, Kontrast und Lesbarkeit prüfen. Nicht committen, bis wir es sagen.

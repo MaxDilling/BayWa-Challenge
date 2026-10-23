@@ -1,4 +1,4 @@
-.PHONY: install dev test fixtures demo wheel pyodide build serve
+.PHONY: install dev test fixtures demo wheel pyodide build serve screenshots
 
 install:
 	uv sync
@@ -38,3 +38,8 @@ build: wheel pyodide
 
 serve: build
 	cd dist/windgap-web && python3 -m http.server 8000
+
+# screenshots/: every GUI step on desktop, mobile and dark, an upload error and the py engine
+screenshots: build
+	npx --prefix web playwright install --only-shell chromium
+	node web/scripts/screenshots.mjs

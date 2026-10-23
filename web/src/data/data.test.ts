@@ -101,6 +101,7 @@ describe('file assignment', () => {
     const a = assignFiles([file('ref.csv', [1, 1, 1, 1, 1, 1]), curve, file('target.csv', [1, null, null, null, 1, 1])])
     expect(a.series.map((s) => s.id)).toEqual(['ref', 'target'])
     expect(a.targetCandidates).toEqual(['target'])
+    expect(a.target).toBe('target')
     expect(a.powerCurve).toEqual({ windMs: [3, 12], powerKw: [0, 3000] })
     expect(a.errors).toEqual([])
   })
@@ -111,7 +112,14 @@ describe('file assignment', () => {
     const a = assignFiles([{ name: 'park.csv', text }, file('ref', [1, 1, 1, 1, 1, 1, 1, 1])])
     expect(a.series.map((s) => s.id)).toEqual(['WTG01', 'WTG02', 'ref'])
     expect(a.targetCandidates).toEqual(['WTG02', 'WTG01'])
+    expect(a.target).toBeUndefined()
     expect(a.powerCurve).toBeUndefined()
+  })
+
+  it('takes the longest outage as the target when it is at least twice as long as any other', () => {
+    const a = assignFiles([file('ref', [1, 1, 1, 1, 1, 1, 1, null, null, null]), file('target', [1, null, null, null, null, null, null, 1, 1, 1])])
+    expect(a.targetCandidates).toEqual(['target', 'ref'])
+    expect(a.target).toBe('target')
   })
 
   it('treats a target file that ends early as having an outage', () => {

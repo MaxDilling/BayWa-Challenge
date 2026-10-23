@@ -6,8 +6,10 @@ import { timeColumns, windSeries, type WindSeries } from './wind'
 export interface Assignment {
   /** Every wind column of every file, in drop order. */
   series: WindSeries[]
-  /** Ids of series with an outage against all others, longest outage first. Exactly one: the target. */
+  /** Ids of series with an outage against all others, longest outage first. */
   targetCandidates: string[]
+  /** The first candidate when it is the only one or its longest outage is at least twice the second's; else ask. */
+  target?: string
   /** Set when exactly one file has no timestamps. */
   powerCurve?: PowerCurve
   powerCurveFile?: string
@@ -46,9 +48,12 @@ export function assignFiles(files: { name: string; text: string }[]): Assignment
       return [s.id, outage ? outage.endMs - outage.startMs : 0]
     }),
   )
+  const targetCandidates = series.filter((s) => longest.get(s.id)! > 0).sort((a, b) => longest.get(b.id)! - longest.get(a.id)!).map((s) => s.id)
+  const [first, second] = targetCandidates.map((id) => longest.get(id)!)
   return {
     series,
-    targetCandidates: series.filter((s) => longest.get(s.id)! > 0).sort((a, b) => longest.get(b.id)! - longest.get(a.id)!).map((s) => s.id),
+    targetCandidates,
+    ...(first && !(second * 2 > first) && { target: targetCandidates[0] }),
     ...(curves.length === 1 && { powerCurve: curves[0].curve, powerCurveFile: curves[0].file, turbines: curves[0].turbines }),
     errors,
   }

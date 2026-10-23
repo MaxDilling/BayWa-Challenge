@@ -1,4 +1,4 @@
-.PHONY: install dev test fixtures demo harness predict dwd wheel pyodide build serve screenshots
+.PHONY: install dev test fixtures demo harness predict dwd wheel pyodide build serve screenshots robustness
 
 install:
 	uv sync
@@ -62,3 +62,8 @@ serve: build
 screenshots: build
 	npx --prefix web playwright install --only-shell chromium
 	node web/scripts/screenshots.mjs
+
+# Realistic uploads (DWD pair, German format, multi-column farm, one year) on both engines, with timings
+robustness: build
+	npx --prefix web playwright install --only-shell chromium
+	node web/scripts/robustness.mjs

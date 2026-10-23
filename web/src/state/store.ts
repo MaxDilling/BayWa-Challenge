@@ -106,11 +106,11 @@ export const RootStore = types
     },
   }))
   .actions((self) => ({
-    /** Files dropped together: take the power curve, and the target when exactly one series has an outage. */
+    /** Files dropped together: take the power curve, and the target when the assignment is sure of it. */
     assign(assignment: Assignment) {
       self.assignment = assignment
       if (assignment.powerCurve) self.setPowerCurve(assignment.powerCurve, assignment.turbines, assignment.powerCurveFile)
-      if (assignment.targetCandidates.length === 1) self.chooseTarget(assignment.targetCandidates[0])
+      if (assignment.target) self.chooseTarget(assignment.target)
     },
   }))
   .actions((self) => {

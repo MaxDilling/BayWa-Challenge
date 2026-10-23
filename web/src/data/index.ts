@@ -1,3 +1,4 @@
+export { assignFiles, type Assignment } from './assign'
 export { ImportError } from './csv'
 export { buildDataset, MAX_REFERENCE_FILL_STEPS, toRequest, type Dataset } from './dataset'
 export { loadDemo } from './demo'

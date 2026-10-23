@@ -1,7 +1,7 @@
 import { readdirSync, readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { analyze } from '@/engine/ts/tsEngine'
-import { buildDataset, loadDemo, parsePowerCurveCsv, parseWindCsv, toRequest } from '.'
+import { assignFiles, buildDataset, loadDemo, parsePowerCurveCsv, parseWindCsv, toRequest } from '.'
 import { isSummerTime } from './berlin'
 import { detectOutages } from './outage'
 
@@ -99,3 +99,35 @@ describe('large files', () => {
   })
 })
 
+describe('file assignment', () => {
+  const file = (name: string, values: (number | null)[], t0 = T0) => ({ name, text: csv(values, t0) })
+  const curve = { name: 'curve.csv', text: 'wind_speed_ms;power_kw\n3;0\n12;3000' }
+
+  it('finds the power curve and the target with the outage', () => {
+    const a = assignFiles([file('ref.csv', [1, 1, 1, 1, 1, 1]), curve, file('target.csv', [1, null, null, null, 1, 1])])
+    expect(a.series.map((s) => s.id)).toEqual(['ref', 'target'])
+    expect(a.targetCandidates).toEqual(['target'])
+    expect(a.powerCurve).toEqual({ windMs: [3, 12], powerKw: [0, 3000] })
+    expect(a.errors).toEqual([])
+  })
+
+  it('splits a file with several turbines and ranks candidates by their longest outage', () => {
+    const text = 'Timestamp;WTG01;WTG02;Temperature\n' + ['5;5;9', '-;5;9', '-;-;9', '-;-;9', '-;-;9', '5;-;9', '5;-;9', '5;5;9']
+      .map((r, i) => `${new Date(T0 + i * 600_000).toISOString()};${r}`).join('\n')
+    const a = assignFiles([{ name: 'park.csv', text }, file('ref', [1, 1, 1, 1, 1, 1, 1, 1])])
+    expect(a.series.map((s) => s.id)).toEqual(['WTG01', 'WTG02', 'ref'])
+    expect(a.targetCandidates).toEqual(['WTG02', 'WTG01'])
+    expect(a.powerCurve).toBeUndefined()
+  })
+
+  it('treats a target file that ends early as having an outage', () => {
+    expect(assignFiles([file('target', [1, 1]), file('ref', [1, 1, 1, 1, 1])]).targetCandidates).toEqual(['target'])
+  })
+
+  it('reports unreadable files, clashing ids and several power curves without dropping the rest', () => {
+    const a = assignFiles([file('a', [1, 1]), file('a.txt', [1, 1]), { name: 'bad.csv', text: 'x;y\nfoo;bar' }, curve, { ...curve, name: 'c2.csv' }])
+    expect(a.series.map((s) => s.id)).toEqual(['a'])
+    expect(a.errors.map((e) => e.file)).toEqual(['a.txt', 'bad.csv', 'curve.csv, c2.csv'])
+    expect(a.powerCurve).toBeUndefined()
+  })
+})

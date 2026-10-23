@@ -78,6 +78,7 @@ Beide Importe (TS in `web/src/data/` für die GUI, Python in `windgap/core/io.py
   - *Windspalten:* Spalten, deren Kopf nach etwas anderem aussieht (Richtung, Temperatur, Druck, Feuchte, Niederschlag, Leistung, Drehzahl, Status, Qualität, Böe, Maximum, Standardabweichung; Muster in `wind.ts`/`io.py`), werden ignoriert und im Bericht genannt. Nennt ein übriger Kopf Wind (`wind`, `speed`, `geschw`, `m/s`, `ws`), sind genau diese Spalten Wind; sonst jede übrige Spalte mit mindestens einer Zahl (z. B. `WTG01;WTG02` oder `time,target,reference`). Jede Windspalte wird eine eigene Reihe. ID: bei einer Windspalte der Dateiname, sonst der Spaltenkopf (ohne Kopf `<Datei> column <n>`).
   - *Werte:* Negative Werte (z. B. `-999`) gelten als fehlend und werden gezählt; anderer Text in einer Windspalte ist ein Fehler. Referenzlücken im Ausfall bis 6 Schritte (1 h) überbrückt der Import linear, längere sind ein Fehler.
 - **Leistungskurve:** CSV ohne Zeitstempel mit Windgeschwindigkeit (m/s) und Leistung je Turbine. Windspalte: erster Kopf mit `wind`, `speed`, `geschw`, `m/s` oder beginnend mit `v`/`ws`, sonst Spalte 1. Leistungsspalten: Köpfe mit `power`, `leistung`, `kw`, `mw` oder beginnend mit `P`, außer Leistungs- und Schubbeiwert (`Cp`, `Ct`, `coefficient`, `thrust`, `Schub`); keine solche: die erste andere Spalte. **Mehrere Leistungsspalten** (z. B. je Luftdichte oder Turbinentyp) sind ein Fehler, der die Spalten nennt: Wir wählen nicht still eine Kurve. Nennt der Kopf der Leistungsspalte MW und nicht kW, wird mit 1000 multipliziert. Windgeschwindigkeiten streng steigend, jede Zeile vollständig, mindestens zwei Punkte. Lineare Interpolation, 0 kW unterhalb des ersten und oberhalb des letzten Punkts (Abschaltgeschwindigkeit). Anzahl der Turbinen gibt die GUI an. **\[offen\]** Format der echten Kurven.
+- **Mehrere Dateien auf einmal** (`assignFiles` in `web/src/data/assign.ts`): Eine Datei, deren erste Datenzeile keinen Zeitstempel enthält, ist die Leistungskurve (mehr als eine: Fehler). Jede Windspalte jeder anderen Datei ist eine Reihe; doppelte IDs sind ein Fehler. Zielkandidaten sind Reihen mit einem Ausfall nach S2 gegenüber allen anderen Reihen, sortiert nach Länge des längsten Ausfalls. Genau ein Kandidat ist das Ziel; sonst fragt die GUI. Fehler einzelner Dateien stehen in `errors`, die übrigen Dateien werden trotzdem zugeordnet.
 
 ### S2 Internes Datenformat (T1)
 
@@ -341,7 +342,7 @@ notebooks/   diagnose.ipynb
 runs/        Harness-Ergebnisse, nicht eingecheckt
 web/                        Vite + React + shadcn (Nova/Radix) + Tailwind v4 + ECharts + MST, CLAUDE.md
   src/engine/  contract.ts (S5)  index.ts (createEngine)  py/ (Worker)  ts/ (Port)
-  src/data/    CSV-Import, Zeitumstellung, Ausfallerkennung, Request-Bau, Demo-Daten (TS)
+  src/data/    CSV-Import, Zeitumstellung, Ausfallerkennung, Dateizuordnung, Request-Bau, Demo-Daten (TS)
   scripts/     fetch-pyodide.mjs
   src/state/   MST-Stores
   src/steps/   Upload, Outage, Method, Results, Export
@@ -362,6 +363,7 @@ In Klammern: geplant, noch nicht angelegt. Leere Platzhalterdateien gibt es nich
 - [ ] PM: GUI-Gerüst mit fünf Schritten, Engine-Schalter und automatischem Rückfall
 - [x] PM: CSV-Import (TS) mit Zeitumstellung und Ausfallerkennung, mit Tests gegen `fixtures/csv/`; Demo-Daten `data/synthetic/` (`make demo`)
 - [x] Python-Import `windgap/core/io.py` für die Harness, besteht dieselben `fixtures/csv/`; beide Importe gehärtet (S1: Formate, mehrere Windspalten, Vorspann, Raster-Prüfung, Leistungskurven-Varianten), 1 Jahr 10-Minuten-Daten in unter 0,2 s (TS) bzw. 0,3 s (Python)
+- [x] `assignFiles` (TS): mehrere Dateien auf einmal zuordnen (Leistungskurve, Reihen, Zielkandidaten); Ablagezone in der GUI folgt
 - [ ] Python-Ausfallerkennung (`windgap/core/outage.py`) für echte Daten in der Harness
 - [ ] PM: Build beider Varianten, GitHub-Pages-Deploy per GitHub Action
 - [ ] Mathe A: MCP-Grundlagen lesen (LR vs. VR), M0–M2 gegen das Interface S3, Erklärtexte, Fixture je Modell

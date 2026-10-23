@@ -1,0 +1,32 @@
+# Harness configuration (SPEC.md, "Harness"). Run: make harness, or
+#   uv run python -m harness --config configs/eval.yaml --models all [--datasets demo,dwd] [--holdout]
+
+# Always runs; score = weighted mean of jury metric / baseline metric, so the baseline scores 1, lower is better.
+baseline: identity
+
+# Jury metrics and their weights in the score (normalized by the total weight). The energy deviation enters as
+# energy_wape_pct, because the mean of |energy_dev_pct| is dominated by calm scenarios with a tiny true energy.
+score:
+  wind_rmse: 1
+  wind_mae: 1
+  power_rmse: 1
+  power_mae: 1
+  energy_wape_pct: 1
+
+scenarios:
+  lengths_h: [1, 6, 12, 24, 48, 72, 120]
+  t0_step_h: 12
+  min_train_days: 5
+  holdout_days: 5  # locked: only runs with --holdout
+
+# kind synthetic: harness/synthetic.py; kind folder: path glob relative to the repo, layout in harness/datasets.py.
+# A folder pattern without CSVs is reported and skipped (data/challenge/ stays empty until the data arrives).
+datasets:
+  - {name: synthetic, kind: synthetic, days: 30, seed: 0}
+  - {name: demo, kind: folder, path: data/synthetic}
+  - {name: dwd, kind: folder, path: "data/dwd/*"}
+  - {name: challenge, kind: folder, path: data/challenge, n_turbines: 1}
+
+# Extra leaderboard rows: a registered model with fixed params, e.g.
+#   identity_sigma2: {model: identity, params: {sigma: 2.0}}
+variants: {}

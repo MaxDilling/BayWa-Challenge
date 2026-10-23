@@ -32,6 +32,8 @@ export function evaluate(truth: Float64Array, pred: Prediction, curve: PowerCurv
     power_mae: avg(pErr.map(Math.abs)),
     coverage_80: avg(t.map((v, i) => Number(v >= p.q10[i] && v <= p.q90[i]))),
     energy_coverage_80: Number(energy.kwhP10 <= trueKwh && trueKwh <= energy.kwhP90),
+    energy_true_kwh: trueKwh,
+    energy_err_kwh: energy.kwhP50 - trueKwh,
   }
   if (trueKwh > 0) {
     metrics.energy_dev_pct = (100 * (energy.kwhP50 - trueKwh)) / trueKwh
@@ -40,13 +42,16 @@ export function evaluate(truth: Float64Array, pred: Prediction, curve: PowerCurv
   return metrics
 }
 
-/** Mean of each metric over scenarios that have it; energy_dev_pct as mean of |·|. */
+/** Mean of each metric over scenarios that have it; energy_dev_pct as mean of |·|; energy_wape_pct = Σ|err| / Σ true. */
 export function summarize(results: Record<string, number>[]): Record<string, number> {
   const keys = [...new Set(results.flatMap(Object.keys))]
-  return Object.fromEntries(
+  const summary: Record<string, number> = Object.fromEntries(
     keys.map((key) => {
       const values = results.filter((r) => key in r).map((r) => (key === 'energy_dev_pct' ? Math.abs(r[key]) : r[key]))
       return [key, avg(values)]
     }),
   )
+  const trueKwh = results.reduce((s, r) => s + r.energy_true_kwh, 0)
+  if (trueKwh > 0) summary.energy_wape_pct = (100 * results.reduce((s, r) => s + Math.abs(r.energy_err_kwh), 0)) / trueKwh
+  return summary
 }

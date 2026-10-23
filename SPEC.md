@@ -187,7 +187,7 @@ interface AnalyzeResponse {
 
 **Aus der Antwort abgeleitet, unabhängig von der Engine:** CSV-Export der Vorhersage und Berichtstext (Bonus 1) baut die GUI selbst.
 
-**Regeln an der Grenze:** JSON kennt kein NaN. Fehlende Messwerte sind `null`; eine nicht berechenbare Kennzahl fehlt in `validation`/`params`/`diagnostics`, statt NaN oder 0 zu sein. `validation` ist der Backtest von `windgap.backtest.backtest`: bis zu 5 simulierte Ausfälle in Länge des echten Ausfalls, rückwärts vom Trainingsende, zusammengefasst mit `metrics.summarize` (Mittelwert je Metrik, `energy_dev_pct` als Betrag), dazu `n_folds`. `scatter.fitLine` ist die In-Sample-Vorhersage, gemittelt je 1-m/s-Klasse der Referenz; das funktioniert auch für Lag- und Tageszeitmodelle. Ausdünnung auf 2000 Punkte deterministisch über Index `floor(i · n / k)`.
+**Regeln an der Grenze:** JSON kennt kein NaN. Fehlende Messwerte sind `null`; eine nicht berechenbare Kennzahl fehlt in `validation`/`params`/`diagnostics`, statt NaN oder 0 zu sein. `validation` ist der Backtest von `windgap.backtest.backtest`: bis zu 5 simulierte Ausfälle in Länge des echten Ausfalls, rückwärts vom Trainingsende, zusammengefasst mit `metrics.summarize` (Mittelwert je Metrik, `energy_dev_pct` als Betrag, `energy_wape_pct`), dazu `n_folds`. `scatter.fitLine` ist die In-Sample-Vorhersage, gemittelt je 1-m/s-Klasse der Referenz; das funktioniert auch für Lag- und Tageszeitmodelle. Ausdünnung auf 2000 Punkte deterministisch über Index `floor(i · n / k)`.
 
 **Dummy-Modell für den ersten Durchstich:** `identity` (Ziel = Referenz, σ konstant 1 m/s). Es existiert in beiden Engines und liefert eine vollständige `AnalyzeResponse`, damit jede Ansicht der GUI ab heute Abend mit echten Strukturen gefüllt ist.
 
@@ -230,10 +230,13 @@ uv run python -m harness --config configs/eval.yaml --models all
 
 **Szenarien (rollierender Ursprung):**
 
-1. Ausfallbeginn t₀ wandert in Schritten von z. B. 6 h durch die Daten, frühestens nach 5 Tagen Trainingsdaten.
-2. Je t₀ mehrere Ausfalllängen: 1 h, 6 h, 12 h, 24 h, 48 h, 72 h, 5 Tage (konfigurierbar).
-3. Das Modell trainiert nur auf Daten vor t₀ und sagt den Zeitraum \[t₀, t₀ + L) vorher.
-4. Die letzten ca. 5 Tage sind ein gesperrter Holdout, der nur für finale Entscheidungen läuft, damit wir nicht auf die Szenarien überanpassen.
+1. Ausfallbeginn t₀ wandert in Schritten von `t0_step_h` (Standard 12 h) durch die Daten, frühestens nach `min_train_days` (5) Tagen Zieldaten.
+2. Je t₀ mehrere Ausfalllängen `lengths_h`: 1 h, 6 h, 12 h, 24 h, 48 h, 72 h, 5 Tage.
+3. Das Modell trainiert nur auf Daten vor t₀ und sagt den Zeitraum \[t₀, t₀ + L) vorher (`windgap.backtest.fold`).
+4. Die letzten `holdout_days` (5) Tage der Zielreihe sind ein gesperrter Holdout: Ohne `--holdout` endet jedes Fenster davor; mit `--holdout` liegen nur t₀ im Holdout (Training auf allem davor). Nur für finale Entscheidungen, damit wir nicht auf die Szenarien überanpassen.
+5. Hat eine Referenz im Fenster eine Lücke, entfällt das Szenario (gezählt und angezeigt); die Harness füllt nichts auf.
+
+Bei 30 Tagen Daten sind das ca. 260 Szenarien je Datensatz und Modell, `identity` braucht dafür ca. 0,6 s.
 
 **Fallen, die die Harness verhindern muss:** keine Normierung oder Lag-Suche über den gesamten Zeitraum; keine Parameterwahl auf dem Holdout; Gleitmittel der Referenz nur rückwärts gerichtet, außer wir entscheiden bewusst, dass die ganze Referenzreihe während des Ausfalls verfügbar ist (sie ist es, deshalb erlaubt, aber dokumentiert).
 
@@ -248,11 +251,19 @@ uv run python -m harness --config configs/eval.yaml --models all
 | `coverage_80` | Anteil echter Werte im 80-%-Band, je Zeitschritt |
 | `energy_coverage_80` | Anteil der Szenarien, deren echte Energie in \[`kwh_p10`, `kwh_p90`\] liegt (je Szenario 0 oder 1); Ziel ca. 0,8 |
 | `energy_band_pct` | (`kwh_p90` − `kwh_p10`) / echte Energie, Breite des Energiebands |
+| `energy_true_kwh`, `energy_err_kwh` | echte Energie und Fehler `kwh_p50` − echt je Szenario, kWh |
+| `energy_wape_pct` | nur zusammengefasst: Σ \|`energy_err_kwh`\| / Σ `energy_true_kwh` über Szenarien. Gewichtet Szenarien nach Energie; der Mittelwert von \|`energy_dev_pct`\| wird dagegen von Flaute-Szenarien mit winziger echter Energie beherrscht (Baseline: über 1000 % bei 6 h) |
 | `score` | nur Harness: gewichtetes Mittel der Jury-Metriken im Verhältnis zur Baseline (siehe unten) |
 
-Prozentwerte fehlen in Szenarien ohne echte Energie (Flaute). Über Szenarien fasst `summarize` zusammen: Mittelwert je Metrik, `energy_dev_pct` als Mittel der Beträge.
+Prozentwerte fehlen in Szenarien ohne echte Energie (Flaute). Über Szenarien fasst `summarize` zusammen: Mittelwert je Metrik, `energy_dev_pct` als Mittel der Beträge, dazu `energy_wape_pct`.
 
-**Ausgabe:** `runs/<zeit>_<commit>/results.parquet` (ein Datensatz je Modell × Szenario), `leaderboard.csv`, und eine Zusammenfassung im Terminal. Ergebnisse lassen sich nach Ausfalllänge und Windklasse aufschlüsseln.
+**Score:** `score` = Σ wᵢ · metricᵢ / metricᵢ(Baseline) / Σ wᵢ über die Metriken und Gewichte unter `score:` in `configs/eval.yaml` (Standard: `wind_rmse`, `wind_mae`, `power_rmse`, `power_mae`, `energy_wape_pct`, je 1). Die Baseline (`baseline:`, Standard `identity`) läuft immer mit und hat Score 1; kleiner ist besser. Berechnet je Datensatz × Ausfalllänge und je Datensatz über alle Längen; die Zeilen `dataset = all` mitteln die Datensätze gleichgewichtet (Score eingeschlossen). Kalibrierung (`coverage_80`, `energy_coverage_80`) steht daneben, zählt aber nicht in den Score, weil die Jury sie nicht bewertet.
+
+**Datensätze** stehen in `configs/eval.yaml`: `kind: synthetic` (Generator) oder `kind: folder` mit Glob relativ zum Repo (`data/synthetic`, `data/dwd/*`, `data/challenge`). Ein Ordner enthält genau eine Leistungskurve (CSV ohne Zeitstempel) und Wind-CSVs nach S1; die Reihe, deren ID `target` enthält (Dateiname bzw. Spaltenkopf), ist das Ziel, alle anderen sind Referenzen. Für die Challenge also z. B. `data/challenge/target.csv`, `reference.csv`, `power_curve.csv`; `n_turbines` im Eintrag. Ein Muster ohne CSVs wird gemeldet und übersprungen.
+
+**Aufruf:** `make harness`, oder `uv run python -m harness --models identity,lr --datasets demo,dwd [--holdout]`. Varianten (`variants:` in der Konfiguration) sind weitere Leaderboard-Zeilen aus einem registrierten Modell mit festen Parametern.
+
+**Ausgabe:** `runs/<zeit>_<commit>/` mit `config.yaml` (Konfiguration und Aufruf), `results.csv` (eine Zeile je Modell × Szenario; CSV statt Parquet, weil pyarrow eine neue Abhängigkeit wäre) und `leaderboard.csv` (Modell × Datensatz × Länge, inkl. `all`), dazu im Terminal drei Tabellen: gesamt, je Datensatz, je Ausfalllänge. Ein Commit mit lokalen Änderungen heißt `<commit>-dirty`. Aufschlüsselung nach Windklasse folgt im Diagnose-Notebook.
 
 **Diagnose-Notebook `notebooks/diagnose.ipynb`** für menschliches Debugging: Überlagerung echt/vorhergesagt für ein wählbares Szenario; Streudiagramm Ziel gegen Referenz mit Modellgeraden; Residuen gegen Referenzwind, gegen Uhrzeit und gegen Ausfalllänge; Fehlerbeitrag zur Energie je Windklasse. Diese Ansichten zeigen, warum ein Modell an einem Tag versagt, und sind wichtiger als eine Karte.
 
@@ -335,7 +346,7 @@ windgap/                    Python-Kern, Pyodide-kompatibel, einziger Inhalt des
   models/    CLAUDE.md  base.py  registry.py  identity.py  (linear.py  variance_ratio.py ...)
   backtest.py               fold() + backtest(), gemeinsam für Engine-Validierung und Harness
   engine.py                 handle(request_json) -> response_json, list_models()
-harness/                    nur nativ: CLAUDE.md  synthetic.py  fixtures.py  demo.py  (scenarios.py  run.py  dwd.py  benchmarks/)
+harness/                    nur nativ: CLAUDE.md  __main__.py (CLI)  run.py (Szenarien, Leaderboard)  datasets.py  synthetic.py  fixtures.py  demo.py  (dwd.py  benchmarks/)
 tests/                      pytest
 fixtures/
   golden/<modell>/<fall>.json   AnalyzeRequest + Antwort von windgap, Spezifikation der ts-Engine
@@ -372,7 +383,7 @@ In Klammern: geplant, noch nicht angelegt. Leere Platzhalterdateien gibt es nich
 - [ ] PM: Build beider Varianten, GitHub-Pages-Deploy per GitHub Action
 - [ ] Mathe A: MCP-Grundlagen lesen (LR vs. VR), M0–M2 gegen das Interface S3, Erklärtexte, Fixture je Modell
 - [x] Synthetik-Generator (`harness/synthetic.py`), Metriken (`windgap/core/metrics.py`), Backtest-Fold (`windgap/backtest.py`)
-- [ ] Mathe B: Szenarien, `configs/eval.yaml`, Leaderboard-CLI
+- [x] Szenarien, `configs/eval.yaml`, Leaderboard-CLI (`make harness`), Kalibrierung des Energiebands (`energy_coverage_80`) und energiegewichtete Energieabweichung (`energy_wape_pct`)
 - [x] Leistungskurve und Erwartungswert der Leistung (S4), erste Version
 - [ ] Mathe B: 3–5 DWD-Stationspaare laden
 - [ ] Alle: Testplan aus „Auslieferung“ auf allen drei Laptops

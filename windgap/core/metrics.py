@@ -29,6 +29,8 @@ def evaluate(truth: pd.Series, pred: pd.DataFrame, curve: PowerCurve) -> dict[st
         "power_mae": float(np.mean(np.abs(p_err))),
         "coverage_80": float(np.mean((t >= p["q10"].to_numpy()) & (t <= p["q90"].to_numpy()))),
         "energy_coverage_80": float(energy.kwh_p10 <= true_kwh <= energy.kwh_p90),
+        "energy_true_kwh": float(true_kwh),
+        "energy_err_kwh": float(energy.kwh_p50 - true_kwh),
     }
     if true_kwh > 0:
         metrics["energy_dev_pct"] = float(100 * (energy.kwh_p50 - true_kwh) / true_kwh)
@@ -38,8 +40,12 @@ def evaluate(truth: pd.Series, pred: pd.DataFrame, curve: PowerCurve) -> dict[st
 
 def summarize(results: list[dict[str, float]]) -> dict[str, float]:
     """Mean of each metric over scenarios that have it; energy_dev_pct as mean of |·| so that errors of opposite
-    sign do not cancel."""
+    sign do not cancel. energy_wape_pct = Σ|energy_err_kwh| / Σ energy_true_kwh weights scenarios by their energy,
+    so calm scenarios with a tiny true energy cannot dominate it the way they dominate energy_dev_pct."""
     table = pd.DataFrame(results)
+    summary = table.mean().to_dict()
     if "energy_dev_pct" in table:
-        table["energy_dev_pct"] = table["energy_dev_pct"].abs()
-    return table.mean().to_dict()
+        summary["energy_dev_pct"] = float(table["energy_dev_pct"].abs().mean())
+    if (true_kwh := table["energy_true_kwh"].sum()) > 0:
+        summary["energy_wape_pct"] = float(100 * table["energy_err_kwh"].abs().sum() / true_kwh)
+    return summary

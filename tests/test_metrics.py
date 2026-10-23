@@ -25,6 +25,7 @@ def test_point_forecast():
     assert m["energy_dev_pct"] == pytest.approx(100 * (1000 / (3000 + 1000 / 9) - 1))
     assert m["energy_coverage_80"] == 0.0
     assert m["energy_band_pct"] == pytest.approx(0, abs=1e-6)
+    assert m["energy_err_kwh"] == pytest.approx((1000 - 3000 - 1000 / 9) / 6)
 
 
 def test_true_energy_inside_band():
@@ -38,7 +39,12 @@ def test_percentages_absent_without_true_energy():
     assert m["energy_coverage_80"] == 1.0
 
 
-def test_summarize_averages_absolute_energy_deviation():
-    summary = summarize([{"wind_rmse": 1.0, "energy_dev_pct": -10.0}, {"wind_rmse": 3.0, "energy_dev_pct": 20.0},
-                         {"wind_rmse": 2.0}])
-    assert summary == {"wind_rmse": 2.0, "energy_dev_pct": 15.0}
+def test_summarize_weights_energy_errors_by_energy():
+    summary = summarize([
+        {"energy_dev_pct": -10.0, "energy_true_kwh": 100.0, "energy_err_kwh": -10.0},
+        {"energy_dev_pct": 20.0, "energy_true_kwh": 50.0, "energy_err_kwh": 10.0},
+        {"energy_true_kwh": 0.0, "energy_err_kwh": 5.0},
+    ])
+    assert summary["energy_dev_pct"] == 15.0
+    assert summary["energy_wape_pct"] == pytest.approx(100 * 25 / 150)
+    assert summary["energy_err_kwh"] == pytest.approx(5 / 3)

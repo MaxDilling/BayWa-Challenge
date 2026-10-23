@@ -1,4 +1,4 @@
-.PHONY: install dev test fixtures demo wheel pyodide build serve screenshots
+.PHONY: install dev test fixtures demo harness wheel pyodide build serve screenshots
 
 install:
 	uv sync
@@ -19,6 +19,10 @@ fixtures:
 # data/synthetic/demo_*.csv behind "Load demo data"
 demo:
 	uv run python -m harness.demo
+
+# Leaderboard over all models and datasets in configs/eval.yaml, written to runs/<time>_<commit>/
+harness:
+	uv run python -m harness --config configs/eval.yaml --models all
 
 wheel:
 	rm -rf web/public/py

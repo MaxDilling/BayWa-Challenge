@@ -1,0 +1,26 @@
+[project]
+name = "windgap"
+dynamic = ["version"]
+description = "Wind outage gap filling and energy loss estimation"
+requires-python = "==3.14.*"
+# Engine path runs in Pyodide: only packages Pyodide ships, and every one costs cold-start time.
+# Pinned to the versions in Pyodide 314.0.7 (web/package.json) so harness and browser compute identically.
+dependencies = ["numpy==2.4.6", "pandas==3.0.2"]
+
+[dependency-groups]
+dev = ["pytest"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.version]
+path = "windgap/__init__.py"
+
+[tool.hatch.build.targets.wheel]
+packages = ["windgap"]
+exclude = ["CLAUDE.md"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]

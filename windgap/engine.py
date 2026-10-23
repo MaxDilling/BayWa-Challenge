@@ -1,0 +1,100 @@
+"""Engine contract S5 (SPEC.md). Pure JSON in, JSON out: the py engine calls this inside Pyodide,
+the harness calls it natively to write the golden fixtures the ts engine is tested against."""
+
+import json
+import math
+import time
+
+import numpy as np
+import pandas as pd
+
+import windgap
+from windgap.backtest import backtest
+from windgap.core.energy import energy_loss, expected_power
+from windgap.core.grid import align, from_ms, grid_to_series, to_ms
+from windgap.core.schema import STEP, STEP_S, Outage, PowerCurve
+from windgap.models import registry
+
+MAX_SCATTER = 2000
+
+
+def handle(request_json: str) -> str:
+    return json.dumps(analyze(json.loads(request_json)), allow_nan=False)
+
+
+def list_models() -> str:
+    return json.dumps([{"name": name} for name in registry.names()])
+
+
+def analyze(req: dict) -> dict:
+    started = time.perf_counter()
+    df = align([grid_to_series(req["target"]), *(grid_to_series(r["grid"]) for r in req["references"])])
+    df.columns = ["target", *(r["id"] for r in req["references"])]
+    target, refs = df.iloc[:, 0], df.iloc[:, 1:]
+    curve = PowerCurve(
+        wind_ms=np.asarray(req["powerCurve"]["windMs"], dtype=float),
+        power_kw=np.asarray(req["powerCurve"]["powerKw"], dtype=float),
+        n_turbines=int(req["powerCurve"]["nTurbines"]),
+    )
+    outage = Outage(from_ms(req["outage"]["startMs"]), from_ms(req["outage"]["endMs"]))
+    outage_index = pd.date_range(outage.start, outage.end, freq=STEP, inclusive="left")
+    refs_out = refs.reindex(outage_index)
+    if refs_out.isna().any().any():
+        raise ValueError("references must be complete during the outage; gap filling belongs to the import step")
+
+    name, params = req["model"], req.get("params") or {}
+    train = df.index < outage.start
+    model = registry.create(name, **params).fit(target[train], refs[train])
+    pred = model.predict(refs_out)
+    energy = energy_loss(expected_power(pred, curve), outage)
+    explanation = model.explain()
+
+    return {
+        "prediction": {
+            "t0": to_ms(outage.start),
+            "stepS": STEP_S,
+            "mean": _floats(pred["mean"]),
+            "q10": _floats(pred["q10"]),
+            "q90": _floats(pred["q90"]),
+        },
+        "validation": _finite(backtest(name, params, target[train], refs[train], curve, len(outage_index))),
+        "explanation": {
+            "summary": explanation.summary,
+            "formula": explanation.formula,
+            "params": _finite(explanation.params),
+            "diagnostics": _finite(explanation.diagnostics),
+        },
+        "energy": {
+            "kwhP10": energy.kwh_p10,
+            "kwhP50": energy.kwh_p50,
+            "kwhP90": energy.kwh_p90,
+            "cumulativeKwh": _floats(energy.cumulative),
+        },
+        "scatter": _scatter(target[train], refs[train], model),
+        "engine": {"id": "py", "version": windgap.__version__, "ms": (time.perf_counter() - started) * 1000},
+    }
+
+
+def _scatter(target: pd.Series, refs: pd.DataFrame, model) -> dict:
+    """Training pairs against the first reference, evenly thinned to MAX_SCATTER. The fit line is the in-sample
+    prediction averaged per 1 m/s reference bin, so it works for lagged and time-dependent models too."""
+    ref = refs.iloc[:, 0]
+    pairs = pd.DataFrame({"ref": ref, "target": target}).dropna()
+    k = min(len(pairs), MAX_SCATTER)
+    shown = pairs.iloc[(np.arange(k) * len(pairs)) // k] if k else pairs
+    line = pd.DataFrame({"ref": ref, "pred": model.predict(refs)["mean"]}).dropna()
+    bins = line.groupby(np.floor(line["ref"])).mean()
+    return {
+        "ref": _floats(shown["ref"]),
+        "target": _floats(shown["target"]),
+        "fitLine": [[float(x), float(y)] for x, y in zip(bins["ref"], bins["pred"])],
+    }
+
+
+def _floats(values) -> list[float]:
+    return [float(v) for v in values]
+
+
+def _finite(d: dict) -> dict[str, float]:
+    """A metric that cannot be computed is absent, never NaN."""
+    return {k: float(v) for k, v in d.items() if math.isfinite(v)}

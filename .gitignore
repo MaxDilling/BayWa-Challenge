@@ -1,0 +1,12 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+dist/
+runs/
+data/challenge/
+node_modules/
+web/dist/
+web/public/pyodide/
+web/public/py/
+.DS_Store

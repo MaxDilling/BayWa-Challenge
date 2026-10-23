@@ -369,9 +369,9 @@ Wir liefern zwei Varianten aus demselben Build, damit eine unbekannte Umgebung b
 
 **Entscheidungsregel:** Standard-Engine ist `py`, wenn der Kaltstart unter 10 Sekunden liegt und alle Tests grün sind. Sonst ist `ts` Standard, und `py` bleibt als Nachweis „der Browser rechnet mit demselben Kern wie unsere Harness“.
 
-## Repo, heute Abend, morgen früh
+## Repo, Stand der Nacht, erste Stunde
 
-Heute Abend steht die komplette Kette einmal durch, mit synthetischen Daten und einfachen Modellen. Morgen tauschen wir nur noch Daten und verbessern Modelle.
+Die komplette Kette steht mit synthetischen Daten, Demo-Daten und fünf DWD-Paaren. Am Challenge-Tag tauschen wir nur noch Daten und verbessern Modelle.
 
 ### Repo-Struktur
 
@@ -407,44 +407,80 @@ dist/        windgap.html  windgap-web/   (von `make build`)
 
 In Klammern: geplant, noch nicht angelegt. Leere Platzhalterdateien gibt es nicht.
 
-### Aufgaben heute Abend
+### Aufgaben der Nacht (Stand 24.10., ca. 02:00)
 
-- [x] PM: Repo, `uv`-Projekt, Makefile (`make dev`, `make test`, `make build`), `SPEC.md` + `CLAUDE.md` aus diesem Dokument
-- [x] PM: Engine-Interface und Typen (S5) in TS und Python, `identity` in Python, Golden-Fixtures
-- [x] PM: `ts`-Engine mit Dummy-Modell `identity`, Golden-Test gegen `fixtures/golden/` (trifft auf 1e-12)
-- [x] PM: **Durchstich Python im Browser:** Pyodide im Worker, `windgap` als Wheel laden, `identity` auf Demo-Daten. Gemessen (headless Chromium, lokal): Kaltstart 3,3–3,4 s, `analyze` 40–80 ms; Ergebnis gleich dem nativen bis 1e-12 (vitest). Rückfall auf `ts` getestet bei fehlendem Pyodide und fehlendem Wheel. Diagramm folgt mit der GUI
-- [ ] PM: GUI-Gerüst mit fünf Schritten, Engine-Schalter und automatischem Rückfall
-- [x] PM: CSV-Import (TS) mit Zeitumstellung und Ausfallerkennung, mit Tests gegen `fixtures/csv/`; Demo-Daten `data/synthetic/` (`make demo`)
-- [x] Python-Import `windgap/core/io.py` für die Harness, besteht dieselben `fixtures/csv/`; beide Importe gehärtet (S1: Formate, mehrere Windspalten, Vorspann, Raster-Prüfung, Leistungskurven-Varianten), 1 Jahr 10-Minuten-Daten in unter 0,2 s (TS) bzw. 0,3 s (Python)
-- [x] `assignFiles` (TS): mehrere Dateien auf einmal zuordnen (Leistungskurve, Reihen, Zielkandidaten); Ablagezone in der GUI folgt
-- [x] Python-Ausfallerkennung (`windgap/core/outage.py`) mit Überbrückung, gemeinsame Fälle `fixtures/outage/`; Abgabe-CLI `harness.predict` (`make predict`) und GUI-Export „Filled target series“, gleich bis aufs Byte (`fixtures/predict/demo.csv`)
-- [ ] PM: Build beider Varianten, GitHub-Pages-Deploy per GitHub Action
-- [x] M0–M3 gegen S3 (`identity`, `linear_regression`, `variance_ratio`, Lag als Parameter), Erklärtexte, Fixtures, `ts`-Port; σ und Fehlergedächtnis kalibriert (`calibrate`), Energieband aus der Fehler-Autokorrelation (S4), `wind_scale` für DWD; Standardmodell der GUI `linear_regression`
-- [x] M7-light: automatische Wahl der Referenz nach Korrelation, Rangfolge in Schritt 3 (Golden-Fall `decoy_first`)
-- [ ] M4 (Tageszeit), M5 (Bin-Modell), gewichtete Kombination mehrerer Referenzen nur, wenn die Harness Gewinn zeigt
-- [x] Synthetik-Generator (`harness/synthetic.py`), Metriken (`windgap/core/metrics.py`), Backtest-Fold (`windgap/backtest.py`)
-- [x] Szenarien, `configs/eval.yaml`, Leaderboard-CLI (`make harness`), Kalibrierung des Energiebands (`energy_coverage_80`) und energiegewichtete Energieabweichung (`energy_wape_pct`)
-- [x] Leistungskurve und Erwartungswert der Leistung (S4), erste Version
-- [x] Fünf DWD-Stationspaare (`make dwd`)
+- [x] PM: Repo, `uv`-Projekt, Makefile, `SPEC.md` + `CLAUDE.md`; Engine-Kontrakt S5 in TS und Python; `ts`-Engine gegen Golden-Fixtures (1e-6, Pyodide 1e-12)
+- [x] PM: **Python im Browser:** Pyodide im Worker, `windgap` als Wheel. Kaltstart 3,3–3,4 s, `analyze` 40–80 ms (headless Chromium, lokal); Rückfall auf `ts` bei fehlendem Pyodide oder Wheel getestet
+- [x] PM: GUI mit fünf Schritten, Engine-Schalter, Rückfall, Ablagezone für alle Dateien, Turbinenzahl als Entscheidung, Methodenvergleich mit Empfehlung, Plausibilitätswarnungen (Banner in Results), „How it works“, E-Mail-Entwurf, Export „Filled target series“
+- [x] PM: Build beider Varianten; GitHub-Action für Pages (deployt erst nach dem nächsten Push, siehe unten)
+- [x] CSV-Import TS und Python gehärtet (S1), gleiche Fälle in `fixtures/csv/`; 1 Jahr 10-Minuten-Daten in < 0,2 s (TS) bzw. 0,3 s (Python); `make robustness` (DWD-Paar mit Lücke, deutsches Format, Park mit mehreren Turbinenspalten, 1 Jahr) auf beiden Engines grün
+- [x] Ausfallerkennung in TS und Python (`fixtures/outage/`), Abgabe-CLI `make predict`, GUI-Export bytegleich (`fixtures/predict/demo.csv`)
+- [x] M0–M3 (`identity`, `linear_regression`, `variance_ratio`, Lag als Parameter) mit kalibriertem σ und korreliertem Energieband, `ts`-Port; M7-light (Referenzwahl nach r)
+- [x] Harness (`make harness`, 7 Datensätze, 1793 Szenarien, 16 s), Synthetik, fünf DWD-Paare (`make dwd`), Score mit `energy_wape_pct`
+- [x] Frischer Klon geprüft: `make install test build harness dwd` und `make predict` laufen ohne lokalen Zustand
+- [ ] **Push:** Die Commits der Nacht liegen nur lokal auf dem PM-Rechner (`origin/main` steht auf `2dcc9d7`). Vor allem anderen pushen, sonst klonen die anderen Laptops den Stand von 23 Uhr
+- [ ] M4 (Tageszeit), M5 (Bin-Modell), gewichtete Kombination mehrerer Referenzen, Diagnose-Notebook: nur, wenn die Harness Gewinn zeigt
 - [ ] Alle: Testplan aus „Auslieferung“ auf allen drei Laptops
 
-### Erste Stunde morgen
+### Erste Stunde (60 Minuten)
 
-1. Fragen an die Organisatoren klären (unten).
-2. Echte Daten in `data/challenge/`, Harness laufen lassen, Leaderboard anschauen.
-3. Danach gemeinsam entscheiden, welche Modellstufen sich lohnen.
+| Minute | Wer | Was |
+| --- | --- | --- |
+| 0–5 | PM | Vom Rechner mit den Nacht-Commits `git push`; prüfen, dass die Pages-Action grün ist |
+| 0–15 | alle | `git clone` bzw. `git pull`, dann `make install test build` (ca. 20 s, beim ersten Mal plus Downloads von Python 3.14, npm-Paketen und Pyodide) und `make dwd` (wenige Sekunden); `make serve` → http://localhost:8000, „Load demo data“, alle fünf Schritte und „How it works“ ansehen |
+| 0–15 | PM | Offene Fragen an die Organisatoren (unten), vor allem 1, 6, 7 und 10 |
+| 15–25 | Mathe B | Echte Daten nach `data/challenge/`: Zieldatei `target.csv` (Name muss `target` enthalten), Referenz(en) `reference.csv` bzw. `reference_<name>.csv`, Leistungskurve `power_curve.csv` (einzige CSV ohne Zeitstempel, eine Leistungsspalte je Turbine in kW oder MW). In `configs/eval.yaml` beim Eintrag `challenge` `n_turbines` setzen. Dann `uv run python -m harness --datasets challenge` und `make harness` (alle Datensätze). Importfehler nennen Datei und Zeile: Regel in S1 nachschlagen, nicht die Datei von Hand „reparieren“, ohne es zu notieren |
+| 15–25 | PM | Dieselben Dateien in der GUI ablegen (eine Ablagezone), Zuordnung, Ausfall und Turbinenzahl prüfen, Warnungen lesen |
+| 25–35 | Mathe B + PM | `make predict TURBINES=n` → `predictions.csv` (mehrere Referenzen: `REFERENCES="data/challenge/reference_a.csv data/challenge/reference_b.csv"`); muss mit dem GUI-Export „Filled target series“ übereinstimmen (gleicher Weg, gleiche Datei). Abweichung = Fehler, sofort melden |
+| 35–60 | alle | Parallel nach Zuständigkeit (unten). Jede Modelländerung: `make fixtures test`, dann Harness; erst bei klarem Score-Gewinn auf `challenge` **und** den anderen Datensätzen `RECOMMENDED` (Python und `ts`), `BENCHMARK` und die Zahlen in „Modellarchitektur“ ändern |
+
+**Womit jede Person beginnt:**
+
+- **Mathe A (Modelle, T2):** Ideen mit Beleg aus der Harness:
+  1. *LR gegen VR:* LR ist überall vorn (Score 0,71 gegen 0,79, `energy_wape_pct` 40 % gegen 50 %), VR hat aber den kleineren Bias (0,07 gegen 0,17 m/s) und deckt das Energieband bei langen Ausfällen schlechter ab (`energy_coverage_80` 0,54 bei 120 h auf Synthetik + Demo). Prüfen, ob der LR-Bias aus dem Clip bei 0 m/s oder aus der Tageszeit kommt.
+  2. *σ je Windklasse:* σ ist eine Gerade in v̂. `coverage_80` je Windklasse (0–4, 4–12, > 12 m/s) messen; liegt sie im steilen Teil der Kurve unter 0,8, σ stückweise schätzen.
+  3. *Tageszeit (M4):* Koeffizienten je 6-h-Block als Parameter von `_Linear`, nicht als neue Datei. Die Synthetik hat einen Tagesgang, die DWD-Binnenpaare eine Stabilitätsänderung; Gewinn nur, wenn auch `challenge` besser wird.
+  4. *Gewichtete Referenzen (M7):* Die Wahl nach r brachte auf DWD 1,87 statt 2,02 m/s Wind-RMSE bei 6 h. Gewicht ∝ 1/Validierungsfehler² über `calibrate`-Fehler ist der nächste Schritt, erklärbar als „Mittel der Referenzen, die bessere zählt mehr“.
+- **Mathe B (Harness, Energie, T3/T4):** Harness auf den echten Daten, Leaderboard je Ausfalllänge lesen; erst danach einmal `--holdout` für die finale Modellwahl. Kalibrierung prüfen: `coverage_80` ≈ 0,8 und `energy_coverage_80` je Länge; bei Abweichung zuerst in `calibrate` (S3) suchen, nicht im Modell. Score-Gewichte in `configs/eval.yaml` anpassen, sobald die Jury-Metrik bekannt ist (offene Frage 7).
+- **PM (GUI, Präsentation, T1/T5/T6):** Push und Pages; GUI mit den echten Dateien durchklicken (Upload-Meldungen, Warnungen, Zahlen mit Einheit); Testplan auf allen Laptops; Präsentation entlang „How it works“ (Analyze → Predict → Calculate, dann „How we chose the method“) mit Live-Demo auf den echten Daten.
+
+### Entscheidungen aus der Nacht (bitte bestätigen)
+
+Getroffen ohne Rücksprache, alle in S1–S5 bzw. „Harness“ beschrieben. Was nicht passt, zuerst hier ändern, dann in beiden Importen bzw. im Code.
+
+| # | Entscheidung | Wo |
+| --- | --- | --- |
+| E1 | Datumsreihenfolge: Jahr zuerst = J-M-T; `01.10.2026` = Tag.Monat; bei `/` und `-` entscheidet die Datei (ein Teil > 12), sonst Fehler | S1 |
+| E2 | Ohne Offset gilt Europe/Berlin, außer der Kopf der Zeitspalte nennt `UTC`/`GMT`; doppelte Herbststunde nach Reihenfolge | S1 |
+| E3 | Doppelter Zeitstempel (außer Herbststunde) ist ein Fehler, auch bei gleichem Wert | S1 |
+| E4 | Nur 10-Minuten-Raster: Zeit auf `:00`, `:10` …, Median-Abstand 10 min, sonst Fehler (keine Stundenwerte, kein Resampling) | S1 |
+| E5 | Windspalten nach Kopf: Richtung, Temperatur, Leistung, Status … ignoriert; nennt ein Kopf Wind, zählen nur diese; jede Windspalte ist eine Reihe. Negative Werte gelten als fehlend | S1 |
+| E6 | Leistungskurve mit mehreren Leistungsspalten ist ein Fehler (keine stille Wahl); MW im Kopf → × 1000; 0 kW außerhalb der Kurve | S1 |
+| E7 | Turbinenzahl muss in der GUI bestätigt werden (auch wenn aus dem Dateinamen gelesen); die CLI verlangt `--n-turbines` | S1 |
+| E8 | Ziel bei mehreren Dateien: die Reihe mit dem längsten Ausfall, wenn er mindestens doppelt so lang ist wie der zweitlängste; sonst fragt die GUI | S1 |
+| E9 | Ausfall ≥ 3 Schritte (30 min), kürzere Lücken sind Messlücken; Referenzlücken im Ausfall bis 1 h linear überbrückt, längere sind ein Fehler | S1, S2 |
+| E10 | Referenzwahl: die Referenz mit der höchsten Korrelation bei ihrem besten Versatz, nur auf Trainingsdaten (M7-light) | Modellarchitektur |
+| E11 | Referenz-Kontext ±6 h (`CONTEXT_STEPS` = 36) um jedes Vorhersagefenster, damit der Versatz τ gemessene Werte liest | S3 |
+| E12 | σ aus Leave-one-block-out (5 Blöcke gleicher Paarzahl), linear in v̂, skaliert auf 80 % Abdeckung; Energieband P50 ± Z₉₀ · SD der Summe mit gemessener Fehler-Autokorrelation | S3, S4 |
+| E13 | Score = Mittel von Wind-RMSE/MAE, Leistungs-RMSE/MAE und `energy_wape_pct`, je relativ zu `identity` (= 1); `energy_wape_pct` statt Mittel von \|`energy_dev_pct`\|, weil Flaute-Szenarien diesen beherrschen | Harness |
+| E14 | DWD-Paare mit `wind_scale: 1.38` (Potenzgesetz 10 m → 100 m), nur als Prüf-Proxy | Externe Daten |
+| E15 | Empfohlenes Modell `linear_regression` als Konstante `RECOMMENDED` (Python und `ts`-Registry), Text dazu in `BENCHMARK` (`HowItWorks.tsx`) | S5 |
+| E16 | Abgabe-CSV: `Timestamp,Wind speed (m/s),Predicted`, Berlin-Zeit `YYYY-MM-DD HH:MM`, Messwerte unverändert, Vorhersage mit 3 Nachkommastellen, `Predicted` = 1 | GUI, Abgabeformat |
+| E17 | Mindestens 1 Tag Zieldaten vor dem Ausfall (`MIN_TRAIN_STEPS`), sonst bricht die Analyse ab; unter 5 Tagen nur eine Warnung | S5, Plausibilitätswarnungen |
 
 ### Offene Fragen an die Organisatoren
 
-1. Wie wird abgegeben: Link, HTML-Datei oder Ordner? Oder nur eine Vorhersage-CSV? Welches Format, welche Zeitstempel?
+1. Wie wird abgegeben: Link, HTML-Datei oder Ordner? Wird zusätzlich eine Vorhersage-CSV erwartet, und in welchem Format (Spalten, Zeitzone, Nachkommastellen; reicht E16)?
 2. Zählt eine Web-App, die Python per WebAssembly im Browser ausführt, als „lokal im Browser“?
 3. Auf welchen Rechnern prüft die Jury: Betriebssystem, Browser, Internetzugang?
 4. Enthält die Testdatei auch Daten nach dem Ausfall, und dürfen wir sie zum Training nutzen?
 5. Gibt es Koordinaten, Nabenhöhen, Turbinentypen, mehrere Referenzparks?
-6. Format der Leistungskurven: je Turbine oder je Park, wie viele Turbinen?
-7. Mit welcher Leistungskurve rechnet die Jury Leistungs-RMSE und Energieabweichung? Relativ oder absolut?
+6. Format der Leistungskurven: je Turbine oder je Park, wie viele Turbinen, eine Kurve je Luftdichte?
+7. Mit welcher Leistungskurve und Turbinenzahl rechnet die Jury Leistungs-RMSE und Energieabweichung? Relativ oder absolut, über welchen Zeitraum?
 8. Sind externe Daten erlaubt?
 9. In welcher Sprache präsentieren wir?
+10. Wie sehen die Zeitstempel der echten Dateien aus (Format, Zeitzone, Zeitumstellung am 25.10.), und können Messwerte negativ oder Platzhalter wie `-999` sein?
+11. Ist das Ziel im Test ein ganzer Park (eine Reihe) oder einzelne Turbinen (mehrere Spalten)?
 
 ### Quellen
 

@@ -1,7 +1,7 @@
 import { readdirSync, readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { analyze } from '@/engine/ts/tsEngine'
-import { assignFiles, buildDataset, loadDemo, parsePowerCurveCsv, parseWindCsv, toRequest } from '.'
+import { assignFiles, buildDataset, loadDemo, parsePowerCurveCsv, parseWindCsv, plausibility, toRequest } from '.'
 import { isSummerTime } from './berlin'
 import { detectOutages } from './outage'
 
@@ -129,5 +129,28 @@ describe('file assignment', () => {
     expect(a.series.map((s) => s.id)).toEqual(['a'])
     expect(a.errors.map((e) => e.file)).toEqual(['a.txt', 'bad.csv', 'curve.csv, c2.csv'])
     expect(a.powerCurve).toBeUndefined()
+  })
+})
+
+describe('plausibility', () => {
+  const outage = { startMs: T0 + 2 * 600_000, endMs: T0 + 5 * 600_000 }
+  const titles = (...args: Parameters<typeof plausibility>) => plausibility(...args).map((w) => w.title)
+
+  it('has nothing to say about the demo', () => {
+    const demo = loadDemo()
+    expect(plausibility(demo, demo.outages[0], 0.9)).toEqual([])
+  })
+
+  it('flags units, copies, low correlation, bridged gaps, short training and an open end', () => {
+    const target = series([1, 2, null, null, null])
+    const dataset = buildDataset(target, [{ ...series([1, 2, 3, null, 5]), id: 'ref' }], { windMs: [3, 12], powerKw: [0, 3] })
+    expect(titles(dataset, outage, 0.5)).toEqual([
+      'Unusual rated power',
+      'Target and ref are identical',
+      'Low correlation r = 0.5',
+      '1 reference value bridged',
+      'Little data before the outage',
+      'The outage runs to the end of the target data',
+    ])
   })
 })

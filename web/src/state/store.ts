@@ -3,13 +3,16 @@ import { addDisposer, flow, toGenerator, types } from 'mobx-state-tree'
 import {
   assignFiles,
   buildDataset,
+  defaultCurve,
   DEMO_FILES,
+  KNOWN_CURVES,
   loadStations,
   plausibility,
   toRequest,
+  site,
   type Assignment,
+  type CurveOption,
   type Dataset,
-  type PowerCurve,
   type Span,
   type WindSeries,
 } from '@/data'
@@ -19,7 +22,7 @@ export const STEPS = ['upload', 'outage', 'method', 'results', 'export'] as cons
 export type Step = (typeof STEPS)[number]
 
 type Inputs = { targets?: WindSeries[]; references?: WindSeries[] }
-export type UploadedCurve = { name: string; curve: PowerCurve; turbines?: number }
+type UploadedCurve = CurveOption & { turbines?: number }
 
 /** Every target is one turbine (team decision, 24.10.); true brings back the turbine count as a decision on the Upload step. */
 export const ASK_TURBINES = false
@@ -39,7 +42,10 @@ export const RootStore = types
     references: types.frozen<WindSeries[]>([]),
     /** Ids of the DWD stations used as extra references. */
     stations: types.frozen<string[]>([]),
-    powerCurve: types.frozen<PowerCurve | undefined>(),
+    /** Power curves added on the role zone; dropped ones come from `assignment`. */
+    roleCurves: types.frozen<UploadedCurve[]>([]),
+    /** The curve the user picked per target id, by name; other targets use `defaultCurve`. */
+    curveChoice: types.frozen<Record<string, string>>({}),
     nTurbines: 1,
     /** False after a power curve came from files: the turbine count is a decision the user must make. */
     turbinesConfirmed: true,
@@ -63,10 +69,6 @@ export const RootStore = types
     assignment: undefined as Assignment | undefined,
     /** Where the proposed turbine count was read, e.g. the power curve's file name. */
     turbinesSource: undefined as string | undefined,
-    /** The dropped file the uploaded curve came from; undefined for one added by role. */
-    powerCurveFile: undefined as string | undefined,
-    /** The power curve from a file, offered next to the built-in ones. */
-    uploadedCurve: undefined as UploadedCurve | undefined,
     /** The DWD stations on offer, empty until loaded. */
     dwd: [] as WindSeries[],
   }))
@@ -81,12 +83,23 @@ export const RootStore = types
     label(name: string) {
       return self.models.find((m) => m.name === name)?.label ?? name
     },
+    get uploadedCurves(): CurveOption[] {
+      const dropped = (self.assignment?.curves ?? []).map(({ file, curve }) => ({ name: file, curve }))
+      return [...dropped, ...self.roleCurves.filter((c) => !dropped.some((d) => d.name === c.name))]
+    },
+  }))
+  .views((self) => ({
+    curveOf(target: string): CurveOption {
+      const ids = [...self.targets, ...self.references].map((s) => s.id)
+      const chosen = [...self.uploadedCurves, ...KNOWN_CURVES].find((c) => c.name === self.curveChoice[target])
+      return chosen ?? defaultCurve(target, self.uploadedCurves, ids)
+    },
   }))
   .views((self) => ({
     get datasets(): Record<string, Dataset> {
-      const { powerCurve, nTurbines, usedReferences } = self
-      if (!powerCurve || !usedReferences.length) return {}
-      return Object.fromEntries(self.targets.map((t) => [t.id, buildDataset(t, usedReferences, powerCurve, nTurbines)]))
+      const { nTurbines, usedReferences } = self
+      if (!usedReferences.length) return {}
+      return Object.fromEntries(self.targets.map((t) => [t.id, buildDataset(t, usedReferences, self.curveOf(t.id).curve, nTurbines)]))
     },
     get outage(): Span | undefined {
       return self.target && self.outages[self.target.id]
@@ -142,23 +155,19 @@ export const RootStore = types
       self.outages = {}
       self.fillOutages()
     },
-    /** A power curve from a file is chosen; when its file is gone, so is the choice of it, not that of a built-in curve. */
-    setUploadedCurve(upload: UploadedCurve | undefined) {
-      if (upload || self.powerCurve === self.uploadedCurve?.curve) self.powerCurve = upload?.curve
-      self.uploadedCurve = upload
-      self.powerCurveFile = undefined
-      if (ASK_TURBINES && upload) {
-        if (upload.turbines) self.nTurbines = upload.turbines
-        self.turbinesSource = upload.turbines ? upload.name : undefined
+    /** Newly uploaded curves: a target of the same site switches to its curve, whatever was picked before. */
+    curvesArrived(curves: UploadedCurve[]) {
+      self.curveChoice = Object.fromEntries(Object.entries(self.curveChoice).filter(([t]) => !curves.some((c) => site(c.name) === site(t))))
+      const stated = curves.find((c) => c.turbines)
+      if (ASK_TURBINES && curves.length) {
+        if (stated) self.nTurbines = stated.turbines!
+        self.turbinesSource = stated?.name
         self.turbinesConfirmed = false
       }
-      self.fillOutages()
     },
-    /** The uploaded curve or a built-in one, by button. */
-    chooseCurve(curve: PowerCurve) {
-      self.powerCurve = curve
+    chooseCurve(target: string, name: string) {
+      self.curveChoice = { ...self.curveChoice, [target]: name }
       if (ASK_TURBINES) self.turbinesConfirmed = false
-      self.fillOutages()
     },
     setTurbines(n: number) {
       self.nTurbines = n
@@ -181,15 +190,13 @@ export const RootStore = types
     },
   }))
   .actions((self) => ({
-    /** Assign all dropped files again: targets the user chose stay while their series exist, else the assignment's. */
-    reassign() {
+    /** Assign all dropped files again: targets the user chose stay while their series exist, else the assignment's.
+     * `added` are the files just dropped. */
+    reassign(added: string[]) {
       const assignment = self.files.length ? assignFiles(self.files) : undefined
       self.assignment = assignment
       const series = assignment?.series ?? []
-      if (assignment?.powerCurve && assignment.powerCurveFile !== self.powerCurveFile) {
-        self.setUploadedCurve({ name: assignment.powerCurveFile!, curve: assignment.powerCurve, turbines: assignment.turbines })
-        self.powerCurveFile = assignment.powerCurveFile
-      } else if (!assignment?.powerCurve && self.powerCurveFile) self.setUploadedCurve(undefined)
+      self.curvesArrived((assignment?.curves ?? []).filter((c) => added.includes(c.file)).map((c) => ({ ...c, name: c.file })))
       const kept = self.targets.filter((t) => series.some((s) => s.id === t.id)).map((t) => t.id)
       self.targetsChosen &&= kept.length > 0
       const ids = self.targetsChosen ? kept : (assignment?.targets ?? [])
@@ -200,16 +207,23 @@ export const RootStore = types
     /** Dropped files join the ones before; a file with the same name replaces its namesake. */
     addFiles(files: DroppedFile[]) {
       self.files = [...self.files.filter((f) => !files.some((n) => n.name === f.name)), ...files]
-      self.reassign()
+      self.reassign(files.map((f) => f.name))
     },
     removeFile(name: string) {
       self.files = self.files.filter((f) => f.name !== name)
-      self.reassign()
+      self.reassign([])
     },
     /** The demo files instead of everything dropped before. */
     loadDemo() {
-      Object.assign(self, { files: DEMO_FILES, stations: [], targetsChosen: false })
-      self.reassign()
+      Object.assign(self, { files: DEMO_FILES, stations: [], targetsChosen: false, roleCurves: [], curveChoice: {} })
+      self.reassign(DEMO_FILES.map((f) => f.name))
+    },
+    addRoleCurve(curve: UploadedCurve) {
+      self.roleCurves = [...self.roleCurves.filter((c) => c.name !== curve.name), curve]
+      self.curvesArrived([curve])
+    },
+    removeRoleCurve(name: string) {
+      self.roleCurves = self.roleCurves.filter((c) => c.name !== name)
     },
     /** A series from the dropped files becomes a target, or a target becomes a reference again. */
     toggleTarget(id: string) {

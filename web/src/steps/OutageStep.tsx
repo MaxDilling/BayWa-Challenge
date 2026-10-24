@@ -60,16 +60,14 @@ export const OutageStep = observer(function OutageStep() {
       </Section>
       <Section
         title="Timeline"
-        description={
-          <span className="flex flex-wrap items-center gap-x-4 gap-y-1">
-            <span>Click a detected outage or drag across the chart to set the outage, drag its edges to fine-tune; zoom with the slider.</span>
-            <Swatch className="bg-outage-edge/40">Selected outage</Swatch>
-            <Swatch className="bg-outage">Other detected outages</Swatch>
-            <Swatch className="bg-gap">Measurement gaps under 30 min ({fmtNum(dataset.gaps.length)})</Swatch>
-          </span>
-        }
+        description="Click a detected outage or drag across the chart to set the outage, drag its edges to fine-tune; zoom with the slider."
       >
         <Timeline dataset={dataset} outage={outage} />
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-label text-muted-foreground">
+          <Swatch className="bg-outage-edge/40">Selected outage</Swatch>
+          <Swatch className="bg-outage">Other detected outages</Swatch>
+          <Swatch className="bg-gap">Measurement gaps under 30 min ({fmtNum(dataset.gaps.length)})</Swatch>
+        </div>
         {outage && <PeriodFields outage={outage} />}
       </Section>
       <Warnings items={warnings.filter((w) => w.step === 'outage')} />
@@ -202,7 +200,7 @@ function PeriodFields({ outage }: { outage: Span }) {
         commit={(endMs) => (endMs > outage.startMs ? store.setOutage({ ...outage, endMs }) : 'The end must be after the start.')}
       />
       <p className="pb-2 text-label text-muted-foreground tabular-nums">
-        <span className="font-medium text-foreground">{fmtDuration(outage.endMs - outage.startMs)}</span>
+        Total time <span className="font-medium text-foreground">{fmtDuration(outage.endMs - outage.startMs)}</span>
       </p>
     </div>
   )

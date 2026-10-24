@@ -202,6 +202,7 @@ interface AnalyzeResponse {
   explanation: { summary: string; formula: string;
                  params: Record<string, number>; diagnostics: Record<string, number> };
   energy: { kwhP10: number; kwhP50: number; kwhP90: number; cumulativeKwh: number[];
+            kwhP50WithoutDirection?: number; // P50 derselben Modellanpassung, vorhergesagt ohne Windrichtung; fehlt ohne Richtungen
             airDensity?: { kgM3: number; ratio: number; kwhP50AtCurveDensity: number } };
             // kgM3 = mittlere Dichte am Ziel im Ausfall, ratio = k (S4), kwhP50AtCurveDensity = P50 bei 1,225 kg/m³; fehlt ohne Korrektur
   scatter: { ref: number[]; target: number[]; fitLine: [number, number][] }; // max. 2000 Punkte
@@ -214,6 +215,8 @@ interface AnalyzeResponse {
 **Aus der Antwort abgeleitet, unabhängig von der Engine:** CSV-Export der Vorhersage und Berichtstext (Bonus 1) baut die GUI selbst.
 
 **Regeln an der Grenze:** Hat das Ziel außerhalb des Ausfalls weniger als `MIN_TRAIN_STEPS` = 144 Werte (ein Tag), bricht `analyze` mit einer Meldung ab, statt NaN zu liefern. JSON kennt kein NaN. Fehlende Messwerte sind `null`; eine nicht berechenbare Kennzahl fehlt in `validation`/`params`/`diagnostics`, statt NaN oder 0 zu sein. `validation` ist der Backtest von `windgap.backtest.backtest`: bis zu 5 simulierte Ausfälle in Länge des echten Ausfalls, rückwärts vom Ausfallbeginn, jeder Fold auf den Zieldaten vor und nach ihm angepasst, zusammengefasst mit `metrics.summarize` (Mittelwert je Metrik, `energy_dev_pct` als Betrag, `energy_wape_pct`), dazu `n_folds`. `scatter` zeigt die Trainingspaare so, wie das Modell sie sieht: Ziel(t) gegen die gewählte Referenz (`diagnostics.reference_index`, ohne Wahl die einzige)(t − τ) mit τ = `diagnostics.lag_min` (0 ohne Versatz). `scatter.fitLine` ist die In-Sample-Vorhersage, gemittelt je 1-m/s-Klasse dieser verschobenen Referenz; für LR und VR also genau die Gerade a + b · v (unten auf 0 begrenzt), für Tageszeitmodelle weiterhin sinnvoll. Ausdünnung auf 2000 Punkte deterministisch über Index `floor(i · n / k)`.
+
+**Einfluss der Lage:** `kwhP50WithoutDirection` ist der P50 desselben angepassten Modells, wenn es im Ausfall keine Windrichtung bekommt (`predict` mit `extra = None`); bei `multi_regression` heißt das Windschatten-Faktor 1 in jedem Sektor. `kwhP50 − kwhP50WithoutDirection` ist also, was Windschatten und Gelände je Richtung am Verlust ändern. Modelle ohne Richtungen liefern beide Werte gleich. Das Feld fehlt, wenn keine Referenz eine Richtung hat.
 
 **Modelle in beiden Engines:** `identity` (Ziel = Referenz, Baseline), `linear_regression`, `variance_ratio`, `multi_regression` und `sector_regression` (Standard der GUI), alle mit kalibriertem σ (S3). `ModelInfo` kommt aus der Registry (`registry.info()`): `label` und `tagline` je Modellklasse, `recommended` für genau das Modell in `registry.RECOMMENDED` (bestes Harness-Ergebnis, Standard der GUI). `fixtures/models.json` hält die Liste fest; die `ts`-Engine muss sie gleich liefern.
 

@@ -119,7 +119,6 @@
     --print-chart-scale: 3;
 
     /* PDF report (report/pdf.ts): type sizes in pt, page margin in mm */
-    --pdf-size-kpi: 28;
     --pdf-size-heading: 15;
     --pdf-size-title: 10.5;
     --pdf-size-body: 8.5;

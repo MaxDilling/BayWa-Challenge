@@ -59,3 +59,10 @@ def test_refuses_an_outage_without_a_day_of_target_data_outside_it():
 def test_demo_prediction_is_current():
     """harness.predict fills the demo outage; the GUI's filled-series export is tested against the same file."""
     assert fixtures.demo_prediction() == fixtures.PREDICT.read_text()
+
+
+@pytest.mark.parametrize("model,changes", [("linear_regression", False), ("multi_regression", True)])
+def test_loss_without_direction_differs_only_for_a_model_that_uses_directions(model, changes):
+    energy = json.loads(handle(json.dumps(fixtures.cases(model)["directions"])))["energy"]
+    assert (energy["kwhP50WithoutDirection"] != pytest.approx(energy["kwhP50"], rel=1e-12)) == changes
+    assert "kwhP50WithoutDirection" not in json.loads(handle(json.dumps(fixtures.cases(model)["basic"])))["energy"]

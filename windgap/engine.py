@@ -54,6 +54,8 @@ def analyze(req: dict) -> dict:
     density = _density(req, df.index, outage)
     factor = 1.0 if density is None else ((density.kg_m3 / RHO_CURVE) ** (1 / 3)).to_numpy()
     energy = energy_loss(expected_power(pred, curve, factor), outage, model.errors.acf)
+    without_direction = {} if extra is None else {"kwhP50WithoutDirection": energy_loss(
+        expected_power(predict_window(model, refs, outage.start, outage.end), curve, factor), outage, model.errors.acf).kwh_p50}
     explanation = model.explain()
 
     return {
@@ -76,6 +78,7 @@ def analyze(req: dict) -> dict:
             "kwhP50": energy.kwh_p50,
             "kwhP90": energy.kwh_p90,
             "cumulativeKwh": _floats(energy.cumulative),
+            **without_direction,
             **({} if density is None else {"airDensity": {
                 "kgM3": float(density.kg_m3.mean()),
                 "ratio": density.ratio,

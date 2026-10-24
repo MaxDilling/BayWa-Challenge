@@ -29,7 +29,11 @@ export function analyze(req: AnalyzeRequest): AnalyzeResponse {
   const model = create(req.model, params).fit(known, refs, extra)
   const pred = predictWindow(model, refs, start, end, extra)
   const density = densityAt(req, all, start, end)
-  const energy = energyLoss(expectedPower(pred, req.powerCurve, density?.kgM3.map((r) => (r / RHO_CURVE) ** (1 / 3))), model.errors.acf)
+  const factor = density?.kgM3.map((r) => (r / RHO_CURVE) ** (1 / 3))
+  const energy = energyLoss(expectedPower(pred, req.powerCurve, factor), model.errors.acf)
+  const withoutDirection = extra && {
+    kwhP50WithoutDirection: energyLoss(expectedPower(predictWindow(model, refs, start, end), req.powerCurve, factor), model.errors.acf).kwhP50,
+  }
   const explanation = model.explain()
 
   return {
@@ -38,6 +42,7 @@ export function analyze(req: AnalyzeRequest): AnalyzeResponse {
     explanation: { ...explanation, params: finite(explanation.params), diagnostics: finite(explanation.diagnostics) },
     energy: {
       ...energy,
+      ...withoutDirection,
       ...(density && {
         airDensity: {
           kgM3: density.kgM3.reduce((s, r) => s + r, 0) / density.kgM3.length,

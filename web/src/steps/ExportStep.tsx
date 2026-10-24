@@ -3,7 +3,7 @@ import { observer } from 'mobx-react-lite'
 import { useEffect, useState } from 'react'
 import { AnalysisState } from '@/components/AnalysisState'
 import { fmtAmount, fmtDateTime, fmtDuration, fmtNum, fmtPct, HOUR, isoBerlin, STEP_MS, toLocalInput } from '@/components/format'
-import { BAND_HINT, farmText, referenceText, toolText, trainingDays } from '@/components/metrics'
+import { BAND_HINT, densityText, farmText, referenceText, toolText, trainingDays } from '@/components/metrics'
 import { Section } from '@/components/Section'
 import { Button } from '@/components/ui/button'
 import { Notice } from '@/components/Notice'
@@ -63,10 +63,11 @@ function emailDraft(dataset: Dataset, outage: Span, model: string, response: Ana
       'Lost energy',
       `• Best estimate (P50): ${fmtAmount(kwhP50)} kWh`,
       `• 80 % range (P10 – P90): ${fmtAmount(kwhP10)} – ${fmtAmount(kwhP90)} kWh`,
+      densityText(response.energy),
     ].join('\n'),
     [
       'Method',
-      `The missing 10-minute wind speeds were predicted from ${referenceText(dataset.references, response.explanation)}. The relationship between the farms was learned from the ${fmtNum(trainingDays(dataset, outage))} days before the outage (${model}). Each prediction, including its uncertainty, was converted to energy with the turbine power curve. ${BAND_HINT}`,
+      `The missing 10-minute wind speeds were predicted from ${referenceText(dataset.references, response.explanation)}. The relationship between the farms was learned from the ${fmtNum(trainingDays(dataset, outage))} days of target data outside the outage (${model}). Each prediction, including its uncertainty, was converted to energy with the turbine power curve. ${BAND_HINT}`,
     ].join('\n'),
     [
       'Validation',

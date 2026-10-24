@@ -5,7 +5,7 @@ import { Chart, type ChartTheme } from '@/components/charts/Chart'
 import { byId, gridPoints, tooltipHtml } from '@/components/charts/series'
 import { fmtAmount, fmtAxisTime, fmtDayTime, fmtDuration, fmtNum, fmtPct, fmtSpan, HOUR, STEP_MS } from '@/components/format'
 import { Hint } from '@/components/Hint'
-import { ACCURACY, BAND_HINT, farmText, rangeText, verdict } from '@/components/metrics'
+import { ACCURACY, BAND_HINT, densityText, farmText, rangeText, verdict } from '@/components/metrics'
 import { Notice } from '@/components/Notice'
 import { Section } from '@/components/Section'
 import { Warnings, WarningSummary } from '@/components/Warnings'
@@ -70,6 +70,7 @@ function EnergyCard({ response, outage, dataset }: { response: AnalyzeResponse; 
         <span>P10 · 10 % quantile</span>
         <span>P90 · 90 % quantile</span>
       </div>
+      <p className="text-label text-pretty text-muted-foreground">{densityText(response.energy)}</p>
     </Section>
   )
 }

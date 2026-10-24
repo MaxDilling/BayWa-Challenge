@@ -89,5 +89,5 @@ def read_folder(name: str, folder: Path, n_turbines: int, files: list[str], targ
     refs = [s for s in sites if s is not targets[0]]
     df = align([targets[0].wind, *(s.wind for s in refs)])
     curve = curves[0]
-    extra = directions([None if s.extra is None else s.extra["direction"] for s in refs], df.index)
+    extra = directions([None if s.extra is None else s.extra.get("direction") for s in refs], df.index)
     return Pair(name, df.iloc[:, 0], df.iloc[:, 1:], PowerCurve(curve.wind_ms, curve.power_kw, n_turbines), extra)

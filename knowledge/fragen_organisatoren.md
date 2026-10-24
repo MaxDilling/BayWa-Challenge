@@ -15,10 +15,10 @@ Stand 24.10.2026. Zum Abschicken auf Englisch; in Klammern, warum wir fragen und
 6. **May we train on the target data after the outage (4–30 Sep)?** It is in the files, but a real outage would not have it. *(Annahme: nein, `fit` sieht nur Daten davor.)*
 7. **Are external data allowed**, e.g. DWD weather stations or ERA5 reanalysis? *(Eingebaut als Option, Standard aus.)*
 8. **Time zone of the timestamps:** we read them as local time (CEST, UTC+2); our check against DWD pressure data agrees. Is that right?
-9. **Power curve:** the curve in `T*_power_curve.xlsx` (4.5 MW, cut-out 26 m/s) looks like a Nordex N149 in a 4.5 MW mode at 1.225 kg/m³. The turbines behind T appear to be smaller, older machines. Should we use the given curve as it is? Should we correct it for air density from the measured pressure and temperature? *(Annahme: Kurve wie gegeben, keine Dichtekorrektur; Team-Entscheidung „T = Nordex“.)*
+9. **Power curve:** the curve in `T*_power_curve.xlsx` (4.5 MW, cut-out 26 m/s) looks like a Nordex N149 in a 4.5 MW mode at 1.225 kg/m³; you confirmed the type, and we believe T is the Wilhelmshöhe wind farm in Uetze (8× N149/4.0-4.5). Is that right? Should we use the given curve as it is? Should we correct it for air density from the measured pressure and temperature? *(Annahme: Kurve wie gegeben, keine Dichtekorrektur; Team-Entscheidung „T = Nordex“.)*
 10. **Wind speed source:** is `wind_speed` the nacelle anemometer? Then it contains the wake of neighbouring turbines (T1 sees about 9 % less wind from the west). Should the prediction reproduce that measured value including wakes, as we do now?
 11. **Wind direction:** T3's direction is about 38° off the others and nearby DWD stations. Is a nacelle north offset known? *(Wir nutzen nur die Richtung der Referenzen.)*
 12. **Park O:** how was the constant air pressure estimated (elevation and hub height)? Are there more measured channels for O?
-13. **Park H:** which park and turbine type is it? We could not match it to BayWa's parks in the public register. *(Nur für die Präsentation wichtig.)*
+13. **Park H:** is it the Hankensbüttel wind farm (5× Nordex N149/5.X, hub heights 104.7 and 125.4 m, Gifhorn district)? *(Aus den Daten erschlossen, `turbinen.md`; nur für die Präsentation wichtig.)*
 14. **Gaps:** in all files 3–4 Aug (48 h) is missing, and `test_set` covers 9 days, not the 10 the README states. Both intended?
 15. **Hidden test:** is 1–3 Sep the only hidden period, and are the hidden values raw measurements (with the random single gaps), or cleaned?

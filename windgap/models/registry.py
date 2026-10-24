@@ -9,7 +9,7 @@ from windgap.models.base import WindModel
 
 _MODELS: dict[str, type] = {}
 # The GUI's default: lowest harness score over all 7 datasets (SPEC.md, Modellarchitektur).
-RECOMMENDED = "linear_regression"
+RECOMMENDED = "sector_regression"
 
 
 def register(name: str):

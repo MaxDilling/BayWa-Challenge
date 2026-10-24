@@ -1,7 +1,7 @@
 // windgap/engine.py, ported for the models in ./models/registry.ts.
 import type { AnalyzeRequest, AnalyzeResponse, Engine, Grid } from '../contract'
-import { backtest, MIN_TRAIN_STEPS, predictWindow } from './backtest'
-import { energyLoss, expectedPower } from './energy'
+import { backtest, MIN_TRAIN_STEPS, outside, predictWindow } from './backtest'
+import { airDensity, energyLoss, expectedPower, RHO_CURVE, targetDensity } from './energy'
 import { align, pairs, rows, STEP_MS, type Frame } from './frame'
 import type { WindModel } from './models/base'
 import { create, info } from './models/registry'
@@ -22,38 +22,60 @@ export function analyze(req: AnalyzeRequest): AnalyzeResponse {
     throw new Error('references must be complete during the outage; gap filling belongs to the import step')
 
   const params = req.params ?? {}
-  const train = Math.max(0, Math.min(start, target.length))
-  const trainTarget = target.slice(0, train)
-  const trainRefs = rows(refs, 0, train)
-  const nTrain = trainTarget.filter((v) => !Number.isNaN(v)).length
+  const known = outside(target, start, end)
+  const nTrain = known.filter((v) => !Number.isNaN(v)).length
   if (nTrain < MIN_TRAIN_STEPS)
-    throw new Error(`The target has ${nTrain} values before the outage; at least ${MIN_TRAIN_STEPS} (one day) are needed to learn from.`)
-  const trainExtra = extra && rows(extra, 0, train)
-  const model = create(req.model, params).fit(trainTarget, trainRefs, trainExtra)
+    throw new Error(`The target has ${nTrain} values outside the outage; at least ${MIN_TRAIN_STEPS} (one day) are needed to learn from.`)
+  const model = create(req.model, params).fit(known, refs, extra)
   const pred = predictWindow(model, refs, start, end, extra)
-  const energy = energyLoss(expectedPower(pred, req.powerCurve), model.errors.acf)
+  const density = densityAt(req, all, start, end)
+  const factor = density?.kgM3.map((r) => (r / RHO_CURVE) ** (1 / 3))
+  const energy = energyLoss(expectedPower(pred, req.powerCurve, factor), model.errors.acf)
   const withoutDirection = extra && {
-    kwhP50WithoutDirection: energyLoss(expectedPower(predictWindow(model, refs, start, end), req.powerCurve), model.errors.acf).kwhP50,
+    kwhP50WithoutDirection: energyLoss(expectedPower(predictWindow(model, refs, start, end), req.powerCurve, factor), model.errors.acf).kwhP50,
   }
   const explanation = model.explain()
 
   return {
     prediction: { t0: startMs, stepS: 600, mean: [...pred.mean], q10: [...pred.q10], q90: [...pred.q90] },
-    validation: finite(backtest(req.model, params, trainTarget, trainRefs, req.powerCurve, refsOut.cols[0].length, trainExtra)),
+    validation: finite(backtest(req.model, params, known, refs, req.powerCurve, start, end - start, extra)),
     explanation: { ...explanation, params: finite(explanation.params), diagnostics: finite(explanation.diagnostics) },
-    energy: { ...energy, ...withoutDirection },
-    scatter: scatter(trainTarget, trainRefs, trainExtra, model, explanation.diagnostics),
+    energy: {
+      ...energy,
+      ...withoutDirection,
+      ...(density && {
+        airDensity: {
+          kgM3: density.kgM3.reduce((s, r) => s + r, 0) / density.kgM3.length,
+          ratio: density.ratio,
+          kwhP50AtCurveDensity: energyLoss(expectedPower(pred, req.powerCurve), model.errors.acf).kwhP50,
+        },
+      }),
+    },
+    scatter: scatter(known, refs, extra, model, explanation.diagnostics),
     engine: { id: 'ts', version: __WINDGAP_VERSION__, ms: performance.now() - started },
   }
 }
+
+/** A grid on the frame's rows, NaN where it has no value. */
+const column = (frame: Frame, g?: Grid) =>
+  Float64Array.from({ length: frame.cols[0].length }, (_, i) => g?.values[(frame.t0 - g.t0) / STEP_MS + i] ?? NaN)
 
 /** windgap.core.grid.directions: each reference's wind direction on the frame's grid, NaN where unknown; undefined
  * when no reference has a direction. */
 function directions(req: AnalyzeRequest, frame: Frame): Frame | undefined {
   if (!req.references.some((r) => r.direction)) return undefined
-  const column = (g?: Grid) =>
-    Float64Array.from({ length: frame.cols[0].length }, (_, i) => g?.values[(frame.t0 - g.t0) / STEP_MS + i] ?? NaN)
-  return { t0: frame.t0, cols: req.references.map((r) => column(r.direction)) }
+  return { t0: frame.t0, cols: req.references.map((r) => column(frame, r.direction)) }
+}
+
+/** windgap.engine._density: air density at the target in the outage (S4). */
+function densityAt(req: AnalyzeRequest, frame: Frame, start: number, end: number) {
+  const rho = (temperature: Grid, pressure: Grid) => {
+    const [t, p] = [column(frame, temperature), column(frame, pressure)]
+    return t.map((v, i) => airDensity(v, p[i]))
+  }
+  if (!req.targetTemperature || !req.targetPressure) return undefined
+  const refs = req.references.flatMap((r) => (r.temperature && r.pressure ? [rho(r.temperature, r.pressure)] : []))
+  return refs.length ? targetDensity(rho(req.targetTemperature, req.targetPressure), refs, start, end) : undefined
 }
 
 /** Training pairs as the model sees them: target(t) against the chosen reference at t − τ, evenly thinned; fit line =

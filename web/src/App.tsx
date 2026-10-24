@@ -27,7 +27,7 @@ const STEP_INFO: Record<Step, { label: string; sentence?: string; View: () => Re
   },
   method: {
     label: 'Method',
-    sentence: 'The model learns from the data before the outage how the target wind follows the reference wind.',
+    sentence: 'The model learns from the data outside the outage how the target wind follows the reference wind.',
     View: MethodStep,
   },
   results: {

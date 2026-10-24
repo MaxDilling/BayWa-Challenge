@@ -8,6 +8,7 @@ from pathlib import Path
 import pandas as pd
 import yaml
 
+from harness import benchmarks
 from harness.datasets import ROOT, load
 from harness.run import COLUMNS, leaderboard, run
 from windgap.models import registry
@@ -30,7 +31,7 @@ def main() -> None:
 
     variants = {name: (name, {}) for name in registry.names()}
     variants |= {label: (v["model"], v.get("params", {})) for label, v in (cfg["variants"] or {}).items()}
-    on_demand = {label for label, v in (cfg["variants"] or {}).items() if v.get("on_demand")}
+    on_demand = {label for label, v in (cfg["variants"] or {}).items() if v.get("on_demand")} | set(benchmarks.NAMES)
     labels = [v for v in variants if v not in on_demand] if args.models == "all" else args.models.split(",")
     models = {label: variants[label] for label in dict.fromkeys([cfg["baseline"], *labels])}
 

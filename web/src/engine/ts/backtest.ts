@@ -22,18 +22,21 @@ export function predictWindow(model: WindModel, refs: Frame, start: number, end:
 
 type Params = Record<string, number | string>
 
-/** Fit on everything before row `start`, predict rows [start, end), score against the hidden target. */
+/** The target with rows [start, end) set to NaN. */
+export const outside = (target: Float64Array, start: number, end: number) => target.map((v, i) => (i >= start && i < end ? NaN : v))
+
+/** Fit on the target on both sides of rows [start, end), predict them, score against the hidden target. */
 export function fold(model: string, params: Params, target: Float64Array, refs: Frame, curve: PowerCurve, start: number, end: number, extra?: Frame) {
-  const fitted = create(model, params).fit(target.slice(0, start), rows(refs, 0, start), extra && rows(extra, 0, start))
+  const fitted = create(model, params).fit(outside(target, start, end), refs, extra)
   const pred = predictWindow(fitted, refs, start, end, extra)
   return { pred, metrics: evaluate(target.slice(start, end), pred, curve, fitted.errors.acf) }
 }
 
-/** Summarized metrics over up to `nFolds` outages of `length` steps, tiled backwards from the end of `target`. */
-export function backtest(model: string, params: Params, target: Float64Array, refs: Frame, curve: PowerCurve, length: number, extra?: Frame, nFolds = 5) {
+/** Summarized metrics over up to `nFolds` outages of `length` steps, tiled backwards from row `before`. */
+export function backtest(model: string, params: Params, target: Float64Array, refs: Frame, curve: PowerCurve, before: number, length: number, extra?: Frame, nFolds = 5) {
   const results: Record<string, number>[] = []
   for (let i = 1; i <= nFolds; i++) {
-    const start = target.length - i * length
+    const start = before - i * length
     if (start < MIN_TRAIN_STEPS) break
     const { metrics } = fold(model, params, target, refs, curve, start, start + length, extra)
     if (Object.keys(metrics).length) results.push(metrics)

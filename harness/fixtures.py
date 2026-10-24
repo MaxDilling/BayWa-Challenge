@@ -30,14 +30,27 @@ def demo_prediction() -> str:
 
 
 def _request(target: pd.Series, refs: dict[str, pd.Series], start: pd.Timestamp, steps: int, model: str,
-             directions: dict[str, pd.Series] | None = None) -> dict:
+             directions: dict[str, pd.Series] | None = None,
+             weather: dict[str, tuple[pd.Series, pd.Series]] | None = None) -> dict:
+    """weather: (temperature, pressure) per reference id, and for the target under "target"."""
     curve = generic_power_curve(n_turbines=4)
+    outage = (target.index >= start) & (target.index < start + steps * STEP)
     target = target.round(2)
-    target[(target.index >= start) & (target.index < start + steps * STEP)] = np.nan
+    target[outage] = np.nan
+    weather = weather or {}
+
+    def grids(rid: str, keys: tuple[str, str]) -> dict:
+        """The target's own weather is missing in the outage, like its wind."""
+        if rid not in weather:
+            return {}
+        return {k: series_to_grid((s.where(~outage) if rid == "target" else s).round(2)) for k, s in zip(keys, weather[rid])}
+
     return {
         "target": series_to_grid(target),
+        **grids("target", ("targetTemperature", "targetPressure")),
         "references": [{"id": rid, "grid": series_to_grid(s.round(2)),
-                        **({"direction": series_to_grid(directions[rid])} if rid in (directions or {}) else {})}
+                        **({"direction": series_to_grid(directions[rid])} if rid in (directions or {}) else {}),
+                        **grids(rid, ("temperature", "pressure"))}
                        for rid, s in refs.items()],
         "powerCurve": {"windMs": curve.wind_ms.tolist(), "powerKw": curve.power_kw.tolist(), "nTurbines": 4},
         "outage": {"startMs": to_ms(start), "endMs": to_ms(start + steps * STEP)},
@@ -63,7 +76,25 @@ def cases(model: str) -> dict[str, dict]:
     shaded = ((direction - 270 + 180) % 360 - 180).abs() < 30
     waked = target.where(~shaded, target * 0.85)
 
+    # 12 days, so that direction sectors gather two days of values; the target sits 8 hPa below the references and
+    # 1 °C cooler, ref_b's weather has a gap, and the target's own weather is missing in the outage as at a real one
+    long = synthetic_pair(days=12, seed=5)
+    rng = np.random.default_rng(6)
+    turn = pd.Series((180 + np.cumsum(rng.normal(0, 6, len(long)))) % 360, index=long.index).round(1) + 0.05
+    west = ((turn - 270 + 180) % 360 - 180).abs() < 45
+    hours = long.index.hour + long.index.minute / 60
+    temp = pd.Series(16 + 6 * np.sin(2 * np.pi * (hours - 9) / 24) + rng.normal(0, 0.3, len(long)), index=long.index)
+    pressure = pd.Series(1005 + np.cumsum(rng.normal(0, 0.05, len(long))), index=long.index)
+    target_weather = (temp - 1, pressure - 8)
+    target_weather[0].iloc[200:230] = np.nan
+    ref_b_weather = (temp + 0.5, pressure + 1)
+    ref_b_weather[1].iloc[1000:1100] = np.nan
+    weather = {"target": target_weather, "ref_a": (temp, pressure), "ref_b": ref_b_weather}
+    ref_b_long = (long["ref"] * 0.9 + np.random.default_rng(7).normal(0, 0.6, len(long))).clip(lower=0)
+
     return {
+        "weather": _request(long["target"].where(~west, long["target"] * 0.8), {"ref_a": long["ref"], "ref_b": ref_b_long},
+                            long.index[8 * 144], 144, model, {"ref_a": turn}, weather),
         "directions": _request(waked, {"ref_a": multi["ref"], "ref_b": ref_b}, multi.index[4 * 144], 144, model,
                                {"ref_a": direction}),
         "basic": _request(basic["target"], {"ref_a": basic["ref"]}, basic.index[3 * 144 + 72], 36, model),

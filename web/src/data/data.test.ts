@@ -180,7 +180,7 @@ describe('plausibility', () => {
       'Target and ref are identical',
       'Low correlation r = 0.50',
       '1 reference value bridged',
-      'Little data before the outage',
+      'Little data outside the outage',
       'The outage runs to the end of the target data',
     ])
   })

@@ -9,13 +9,19 @@
     "name": "linear_regression",
     "label": "Linear regression (MCP)",
     "tagline": "Least-squares line through the reference wind, shifted by the delay between the farms.",
-    "recommended": true
+    "recommended": false
   },
   {
     "name": "multi_regression",
     "label": "Multiple regression (MCP)",
     "tagline": "Least-squares weights over all reference farms, each shifted by its own delay.",
     "recommended": false
+  },
+  {
+    "name": "sector_regression",
+    "label": "Multiple regression by wind direction (MCP)",
+    "tagline": "Least-squares weights over all reference farms, fitted separately for each wind direction sector.",
+    "recommended": true
   },
   {
     "name": "variance_ratio",

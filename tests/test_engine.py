@@ -48,10 +48,11 @@ def test_prediction_spans_outage():
     assert response["validation"]["n_folds"] >= 1
 
 
-def test_refuses_an_outage_without_a_day_of_target_data_before_it():
+def test_refuses_an_outage_without_a_day_of_target_data_outside_it():
     request = fixtures.cases("identity")["basic"]
     request["outage"]["startMs"] = request["target"]["t0"] + 143 * 600_000
-    with pytest.raises(ValueError, match="143 values before the outage"):
+    request["outage"]["endMs"] = request["target"]["t0"] + len(request["target"]["values"]) * 600_000
+    with pytest.raises(ValueError, match="143 values outside the outage"):
         handle(json.dumps(request))
 
 

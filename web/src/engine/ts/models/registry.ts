@@ -4,6 +4,7 @@ import type { WindModel } from './base'
 import { Identity } from './identity'
 import { LinearRegression, VarianceRatio } from './linear'
 import { MultiRegression } from './multi'
+import { SectorRegression } from './sector'
 
 type Params = Record<string, number | string>
 
@@ -26,6 +27,11 @@ const MODELS: Record<string, { label: string; tagline: string; create: (p: Param
     tagline: 'Least-squares weights over all reference farms, each shifted by its own delay.',
     create: (p) => new MultiRegression(lagMax(p), sectors(p)),
   },
+  sector_regression: {
+    label: 'Multiple regression by wind direction (MCP)',
+    tagline: 'Least-squares weights over all reference farms, fitted separately for each wind direction sector.',
+    create: (p) => new SectorRegression(lagMax(p), sectors(p)),
+  },
   variance_ratio: {
     label: 'Variance ratio (MCP)',
     tagline: "Line that keeps the target's mean and spread, shifted by the delay between the farms.",
@@ -33,7 +39,7 @@ const MODELS: Record<string, { label: string; tagline: string; create: (p: Param
   },
 }
 
-const RECOMMENDED = 'linear_regression'
+const RECOMMENDED = 'sector_regression'
 
 export const names = () => Object.keys(MODELS).sort()
 

@@ -6,7 +6,7 @@ import { fmtAmount, fmtDuration, fmtNum } from '@/components/format'
 import { Formula } from '@/components/Formula'
 import { Hint } from '@/components/Hint'
 import { BENCHMARK } from '@/components/HowItWorks'
-import { compass, KEYS, keyValue, METRICS, wakeSectors, wakeText } from '@/components/metrics'
+import { compass, KEYS, keyValue, METRICS, SECTOR_TEXT, sectorWeights, wakeSectors, wakeText } from '@/components/metrics'
 import { Section } from '@/components/Section'
 import { Warnings } from '@/components/Warnings'
 import { Badge } from '@/components/ui/badge'
@@ -16,8 +16,8 @@ import { store } from '@/state/store'
 
 const COMPARED = [METRICS.energy_wape_pct, METRICS.wind_rmse, METRICS.coverage_80]
 /** Reference choice and wake factors, shown in their own cards. */
-const OWN_CARD = /^(reference_index|r_ref_\d+|wake_(factor|steps)_.+)$/
-/** Bonus 3: the model picks the reference that tracked the target best before the outage; this card shows why. */
+const OWN_CARD = /^(reference_index|r_ref_\d+|wake_(factor|steps)_.+|sector_steps_.+|a_\d+|b_\d+_ref_\d+)$/
+/** Bonus 3: the model picks the reference that tracked the target best outside the outage; this card shows why. */
 const ReferenceChoice = observer(function ReferenceChoice({ response }: { response: AnalyzeResponse }) {
   const d = response.explanation.diagnostics
   const ranked = store.dataset!.references
@@ -27,7 +27,7 @@ const ReferenceChoice = observer(function ReferenceChoice({ response }: { respon
   return (
     <Section
       title="Reference farm"
-      description={`We use ${used.id} because it tracked the target best before the outage: r = ${fmtNum(used.r, 3)}. Each farm is tried at its best delay τ; the others are not used.`}
+      description={`We use ${used.id} because it tracked the target best outside the outage: r = ${fmtNum(used.r, 3)}. Each farm is tried at its best delay τ; the others are not used.`}
       className="lg:col-span-12"
     >
       <ul className="flex flex-col gap-1.5 text-label">
@@ -65,6 +65,7 @@ export const MethodStep = observer(function MethodStep() {
           <Explanation response={response} />
           <ScatterCard response={response} />
           {wakeSectors(response.explanation).length > 0 && <WakeCard response={response} />}
+          {Object.keys(response.explanation.diagnostics).some((k) => k.startsWith('sector_steps_')) && <SectorCard response={response} />}
         </>
       ) : (
         <div className="lg:col-span-12">
@@ -183,7 +184,7 @@ function scatterOption({ scatter, explanation }: AnalyzeResponse, t: ChartTheme)
     grid: { left: t.label * 2, bottom: t.label * 2 },
     series: [
       {
-        name: '10-min pairs before the outage',
+        name: '10-min pairs outside the outage',
         type: 'scatter',
         data: scatter.ref.map((r, i) => [r, scatter.target[i]]),
         symbolSize: t.point,
@@ -217,7 +218,7 @@ function ScatterCard({ response }: { response: AnalyzeResponse }) {
   return (
     <Section
       title="Target against reference"
-      description="Each point is one 10-minute pair from before the outage, with the reference shifted by the delay τ, as the model sees it. The line is what the model predicts for each reference wind speed."
+      description="Each point is one 10-minute pair from outside the outage, with the reference shifted by the delay τ, as the model sees it. The line is what the model predicts for each reference wind speed."
       action={
         r !== undefined && (
           <Badge variant="secondary" className="tabular-nums">
@@ -239,7 +240,7 @@ export function wakeOption(sectors: ReturnType<typeof wakeSectors>, t: ChartThem
       trigger: 'axis',
       formatter: ([{ dataIndex }]: { dataIndex: number }[]) => {
         const { deg, factor, steps } = sectors[dataIndex]
-        return `<div class="text-label"><div class="font-medium">Wind from ${compass(deg)}</div>factor ${fmtNum(factor, 3)} · ${fmtNum(steps)} values before the outage</div>`
+        return `<div class="text-label"><div class="font-medium">Wind from ${compass(deg)}</div>factor ${fmtNum(factor, 3)} · ${fmtNum(steps)} values outside the outage</div>`
       },
     },
     xAxis: { type: 'category', data: sectors.map((s) => compass(s.deg)), name: 'Wind from', nameLocation: 'middle', nameGap: t.label * 1.8 },
@@ -252,6 +253,48 @@ export function wakeOption(sectors: ReturnType<typeof wakeSectors>, t: ChartThem
     ],
   }
 }
+
+/** sector_regression: the weights of every reference per wind direction, as a table. */
+const SectorCard = observer(function SectorCard({ response }: { response: AnalyzeResponse }) {
+  const { references, sectors } = sectorWeights(store.dataset!.references, response.explanation)
+  return (
+    <Section title="Weights by wind direction" description={SECTOR_TEXT} className="lg:col-span-12">
+      <div className="overflow-x-auto">
+        <table className="w-full text-left text-label tabular-nums">
+          <thead className="text-muted-foreground">
+            <tr className="border-b">
+              <th className="py-1.5 pr-3 font-medium">Wind from</th>
+              <th className="px-3 py-1.5 text-right font-medium">Values</th>
+              <th className="px-3 py-1.5 text-right font-medium">a (m/s)</th>
+              {references.map((id) => (
+                <th key={id} className="px-3 py-1.5 text-right font-medium">
+                  {id}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {sectors.map((s) => (
+              <tr key={s.deg} className="border-b last:border-0">
+                <td className="py-1.5 pr-3">
+                  {compass(s.deg)}
+                  {!s.own && <span className="text-muted-foreground"> · all</span>}
+                </td>
+                <td className="px-3 py-1.5 text-right">{fmtNum(s.steps)}</td>
+                <td className="px-3 py-1.5 text-right">{fmtNum(s.a, 2)}</td>
+                {s.weights.map((b, k) => (
+                  <td key={references[k]} className="px-3 py-1.5 text-right">
+                    {fmtNum(b, 3)}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </Section>
+  )
+})
 
 /** Bonus 2 in plain words: how much more or less wind the target sees from each direction than its references suggest. */
 function WakeCard({ response }: { response: AnalyzeResponse }) {

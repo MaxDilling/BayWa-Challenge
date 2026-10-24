@@ -7,7 +7,7 @@ import { jsPDF } from 'jspdf'
 import { chartImage, type ChartTheme } from '@/components/charts/Chart'
 import { readTheme } from '@/components/charts/theme'
 import { fmtAmount, fmtDateTimeZone, fmtDuration, fmtNum, fmtSpanZone } from '@/components/format'
-import { compass, farmText, referenceRoles, toolText, wakeSectors, wakeText } from '@/components/metrics'
+import { compass, densityText, farmText, referenceRoles, SECTOR_TEXT, sectorWeights, toolText, wakeSectors, wakeText } from '@/components/metrics'
 import type { Dataset, Span } from '@/data'
 import type { AnalyzeResponse } from '@/engine'
 import { wakeOption } from '@/steps/MethodStep'
@@ -371,6 +371,23 @@ function target(w: Writer, c: Required<Case>, input: ReportInput, chart: ChartTh
       w.image(cumulative, half)
     },
   )
+  w.text(densityText(energy), { color: s.muted })
+
+  const weights = sectorWeights(dataset.references, explanation)
+  if (weights.sectors.length)
+    w.keep(() => {
+      w.title('Weights by wind direction')
+      w.text(SECTOR_TEXT, { color: s.muted, gap: 1 })
+      const width = Math.min(22, (w.width - 44) / weights.references.length)
+      const cells = (texts: string[], color?: string) =>
+        [...texts, ''].map((text, k) => ({ text, width: k === 0 ? 26 : k === 1 ? 18 : width, color, align: k ? ('right' as const) : undefined }))
+      w.row(cells(['Wind from', 'Values', 'a (m/s)', ...weights.references], s.muted), s.label)
+      for (const sector of weights.sectors)
+        w.row(
+          cells([`${compass(sector.deg)}${sector.own ? '' : ' · all'}`, fmtNum(sector.steps), fmtNum(sector.a, 2), ...sector.weights.map((b) => fmtNum(b, 3))]),
+          s.label,
+        )
+    })
 
   if (!sectors.length) return
   const wake = chartImage(wakeOption(sectors, chart), chart, chart.print.height)
@@ -473,10 +490,11 @@ function assumptions(w: Writer, input: ReportInput, done: Required<Case>[], tool
     `The wind at the target was not measured during the outage. It was simulated from the wind measured at the same time by ${sources.join(' and ')}, ` +
       'whose relation to the target the model learned before the outage.',
     'All times are local time in Germany (Europe/Berlin, CET or CEST as marked); the CSV exports also carry UTC.',
-    'The lost energy is the output of the power curve for the predicted wind, summed over the 10-minute steps of the outage.',
+    'The lost energy is the output of the power curve for the predicted wind, summed over the 10-minute steps of the outage. ' +
+      'The curve is used as given apart from the air density stated for each target.',
     'P10 and P90 are the 10 % and 90 % quantiles: with 80 % probability the loss lies between them; P50 is the central estimate. In wind ' +
       'resource assessments “P90” names the conservative value exceeded with 90 % probability; here P90 is the high value.',
-    'The model learns only from data before the outage. The accuracy figures come from simulated outages of the same length on that data, before the real outage.',
+    'The model learns from the target data outside the outage, before and after it. The accuracy figures come from simulated outages of the same length before the real outage, each learned from the data on both sides of it.',
     `Data: ${input.files.length ? input.files.join(', ') : 'the wind series and power curve loaded in the tool'}` +
       (input.stations.length
         ? `; weather stations ${input.stations.join(', ')}: Deutscher Wetterdienst (DWD), opendata.dwd.de, 10-minute wind at about 10 m height, licensed under CC BY 4.0.`

@@ -8,33 +8,35 @@ import { store } from '@/state/store'
 
 /** Harness result behind the recommendation (SPEC.md, Modellarchitektur); update together with registry.RECOMMENDED. */
 export const BENCHMARK = {
-  run: '24 Oct 2026, commit 0e0b52c',
-  scenarios: 1793,
-  datasets: 7,
+  run: '24 Oct 2026, commit 1a9b2d0 with the changes of that day',
+  scenarios: 645,
+  datasets: 10,
   rows: [
-    { model: 'linear_regression', variant: '', score: 0.71, energyPct: 40 },
-    { model: 'linear_regression', variant: 'without delay τ', score: 0.75, energyPct: 41 },
-    { model: 'variance_ratio', variant: '', score: 0.79, energyPct: 50 },
-    { model: 'identity', variant: '', score: 1, energyPct: 157 },
+    { model: 'sector_regression', variant: '', score: 0.64, energyPct: 24 },
+    { model: 'multi_regression', variant: '', score: 0.64, energyPct: 24 },
+    { model: 'linear_regression', variant: '', score: 0.67, energyPct: 25 },
+    { model: 'variance_ratio', variant: '', score: 0.72, energyPct: 31 },
+    { model: 'identity', variant: '', score: 1, energyPct: 118 },
   ],
 }
 
 const STEPS: { title: string; task: string; body: ReactNode; tex?: string; legend?: [string, string][] }[] = [
   {
     title: 'Analyze',
-    task: 'Learn how the wind at both farms is related, from the data before the outage.',
-    tex: String.raw`\hat{v}_t = a + b \cdot v_r(t - \tau)`,
+    task: 'Learn how the wind at both farms is related, from the data outside the outage.',
+    tex: String.raw`\hat{v}_t = a_{s(t)} + \sum_i b_{s(t),i} \cdot v_i(t - \tau_i)`,
     legend: [
       [String.raw`\hat{v}_t`, 'predicted target wind'],
-      [String.raw`v_r`, 'reference wind'],
-      [String.raw`a, b`, 'intercept and slope'],
-      [String.raw`\tau`, 'delay'],
+      [String.raw`v_i`, 'wind at reference farm i'],
+      [String.raw`a_s, b_{s,i}`, 'intercept and weights for wind direction sector s'],
+      [String.raw`\tau_i`, 'delay of reference farm i'],
     ],
     body: (
       <>
-        A straight line through the reference wind, fitted by least squares on the 10-minute pairs before the outage. The delay τ (up to ±60
-        min) is the shift at which both farms move together best: weather fronts reach them one after the other. With several reference
-        farms, the one that tracked the target best before the outage is used.
+        A weighted sum of all reference farms, fitted by least squares on the 10-minute values outside the outage. Each reference is read
+        at its own delay τ (up to ±60 min), the shift at which it tracks the target best. The weights are fitted separately for each of 8
+        wind directions s, so a neighbouring turbine’s wake or the terrain in one direction gets its own weights; a direction with less
+        than two days of values uses the weights of all directions.
       </>
     ),
   },
@@ -44,7 +46,7 @@ const STEPS: { title: string; task: string; body: ReactNode; tex?: string; legen
     body: (
       <>
         Every missing 10-minute value gets a prediction and an 80 % band. The band is not taken from how well the line fits, but measured on
-        your own data: the period before the outage is cut into 5 blocks, each block is predicted by a line fitted on the other four, and
+        your own data: the data outside the outage is cut into 5 blocks, each block is predicted by a line fitted on the other four, and
         the band is scaled so that 80 % of these unseen errors fall inside. It grows with the wind, because errors do.
       </>
     ),
@@ -52,10 +54,11 @@ const STEPS: { title: string; task: string; body: ReactNode; tex?: string; legen
   {
     title: 'Calculate',
     task: 'Turn the predicted wind into lost energy with the power curve.',
-    tex: String.raw`\hat{P}_t = \mathbb{E}\left[P(v)\right], \quad v \sim \mathcal{N}(\hat{v}_t, \sigma_t^2)`,
+    tex: String.raw`\hat{P}_t = \mathbb{E}\left[P\big(v \cdot (\rho_t / 1.225)^{1/3}\big)\right], \quad v \sim \mathcal{N}(\hat{v}_t, \sigma_t^2)`,
     legend: [
       [String.raw`\hat{P}_t`, 'expected power'],
       [String.raw`P(v)`, 'power curve'],
+      [String.raw`\rho_t`, 'air density at the target'],
       [String.raw`\mathbb{E}`, 'expected value'],
       [String.raw`\mathcal{N}`, 'normal distribution'],
       [String.raw`\sigma_t`, 'prediction error spread'],
@@ -63,7 +66,9 @@ const STEPS: { title: string; task: string; body: ReactNode; tex?: string; legen
     body: (
       <>
         The power is averaged over the uncertainty instead of read at the predicted wind alone, which gives back the peaks a fitted line
-        smooths away; energy is power × 10 min, summed over the outage and the turbines. For the P10–P90 range, errors are added as
+        smooths away. Thinner air than the 1.225 kg/m³ of the power curve yields less power, so where target and references measure
+        temperature and air pressure, the wind is scaled to the air density ρ at the target, estimated from the references’ density and
+        the ratio measured outside the outage. Energy is power × 10 min, summed over the outage and the turbines. For the P10–P90 range, errors are added as
         persistent as they were in the backtest: over a short outage they add up almost fully, over a long one they partly cancel.
       </>
     ),
@@ -122,9 +127,9 @@ export const HowItWorks = observer(function HowItWorks() {
         <section className="flex flex-col gap-3 border-t px-4 pt-5 pb-4">
           <h3 className="font-medium">How we chose the method</h3>
           <p className="text-pretty">
-            Our test harness hides the measurements of {BENCHMARK.scenarios.toLocaleString('en-US')} simulated outages from 1 h to 5 days on{' '}
-            {BENCHMARK.datasets} datasets (a synthetic pair with known truth, the demo data and 5 real pairs of German weather stations 29–41
-            km apart) and compares every method with the reference as is. The score averages wind RMSE and MAE, power RMSE and MAE and the
+            Our test harness hides the measurements of {BENCHMARK.scenarios.toLocaleString('en-US')} simulated outages from 6 h to 5 days on{' '}
+            {BENCHMARK.datasets} datasets (a synthetic pair with known truth, the demo data, 5 real pairs of German weather stations 29–41
+            km apart and the three challenge turbines T1–T3 with seven reference turbines each) and compares every method with the reference as is. The score averages wind RMSE and MAE, power RMSE and MAE and the
             energy error relative to that baseline: 1 is the baseline, lower is better. The accuracy in Results repeats this test on your
             data.
           </p>

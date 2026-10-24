@@ -424,7 +424,8 @@ function targetPage(w: Writer, c: Required<Case>, input: ReportInput, chart: Cha
   })
 }
 
-/** From the predicted wind to the lost energy; rows 3 and 4 add up to row 5, the effect of location is what the wake factors change. */
+/** From the predicted wind to the lost energy; rows 3 and 4 add up to row 5, the effect of location is what the wake factors or the
+ * weights per wind direction sector change. */
 function derivation(w: Writer, c: Required<Case>, input: ReportInput) {
   const { dataset, outage, response } = c
   const { energy, prediction, explanation } = response
@@ -432,6 +433,7 @@ function derivation(w: Writer, c: Required<Case>, input: ReportInput) {
   const meanWind = prediction.mean.reduce((sum, v) => sum + v, 0) / prediction.mean.length
   const plain = energy.kwhP50WithoutDirection
   const sectors = wakeSectors(explanation)
+  const bySector = sectorWeights(dataset.references, explanation).sectors.some((sector) => sector.own)
   const signed = (v: number, text: string) => `${v > 0 ? '+' : v < 0 ? '−' : ''}${text}`
   const location = (): Cell[] => {
     if (plain === undefined)
@@ -445,7 +447,10 @@ function derivation(w: Writer, c: Required<Case>, input: ReportInput) {
           ? 'Row 3 with the wind of each step multiplied by the factor of its direction sector: what the references cannot see from where ' +
             `they stand, such as the wake of a neighbouring turbine or terrain. Strongest: wind from ${compass(strongest.deg)} ` +
             `× ${fmtNum(strongest.factor, 3)} (see “Wake and terrain by wind direction”).`
-          : `${input.method} does not adjust the wind by direction, so the location has no effect of its own here.`,
+          : bySector
+            ? 'Row 3 with the weights of the wind direction sector of each step instead of the weights of all directions: what the ' +
+              'references cannot see from where they stand, such as the wake of a neighbouring turbine or terrain (see “Weights by wind direction”).'
+            : `${input.method} does not adjust the wind by direction, so the location has no effect of its own here.`,
       },
       { text: `${signed(delta, fmtAmount(Math.abs(delta)))} kWh${pct}`, align: 'right' },
     ]

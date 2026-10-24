@@ -5,18 +5,20 @@ import { Chart, type ChartTheme } from '@/components/charts/Chart'
 import { byId, gridPoints, tooltipHtml } from '@/components/charts/series'
 import { fmtAmount, fmtAxisTime, fmtDayTime, fmtDuration, fmtNum, fmtPct, fmtSpan, HOUR, STEP_MS } from '@/components/format'
 import { Hint } from '@/components/Hint'
-import { ACCURACY, BAND_HINT, densityText, farmText, rangeText, verdict } from '@/components/metrics'
+import { ACCURACY, BAND_HINT, calculating, densityText, farmText, missing, rangeText, TOTAL_HINT, totalText, verdict } from '@/components/metrics'
 import { Notice } from '@/components/Notice'
 import { Section } from '@/components/Section'
 import { Warnings, WarningSummary } from '@/components/Warnings'
 import type { Dataset, Span } from '@/data'
 import type { AnalyzeResponse } from '@/engine'
+import { cn } from '@/lib/utils'
 import { store } from '@/state/store'
 
 const CHECKS_ID = 'data-checks'
 
 export const ResultsStep = observer(function ResultsStep() {
   const { response, dataset, outage, warnings } = store
+  if (store.showsTotal) return <TotalCard />
   if (!response || !dataset || !outage) return <AnalysisState />
   return (
     <div className="grid gap-section lg:grid-cols-12">
@@ -39,6 +41,64 @@ export const ResultsStep = observer(function ResultsStep() {
         </Section>
       )}
     </div>
+  )
+})
+
+/** Every target with the selected model, as in the report's summary; only the P50 values add up. */
+export const TotalCard = observer(function TotalCard() {
+  const { cases } = store
+  const done = cases.filter((c) => c.response)
+  const cell = 'px-3 py-2.5 whitespace-nowrap'
+  return (
+    <Section title="Lost energy of all targets" description={`One row per target with ${store.label(store.model)}.`}>
+      <div className="overflow-x-auto">
+        <table className="w-full text-left tabular-nums">
+          <thead className="text-label text-muted-foreground">
+            <tr className="border-b">
+              <th className="py-2 pr-3 font-medium">Target</th>
+              <th className="px-3 py-2 font-medium">Outage</th>
+              <th className="px-3 py-2 text-right font-medium">Duration</th>
+              <th className="px-3 py-2 text-right font-medium">Lost energy P50</th>
+              <th className="py-2 pl-3 text-right font-medium">Range P10–P90</th>
+            </tr>
+          </thead>
+          <tbody>
+            {cases.map((c) => {
+              const e = c.response?.energy
+              return (
+                <tr key={c.id} className="border-b">
+                  <td className="py-2.5 pr-3 font-medium">{c.id}</td>
+                  {e ? (
+                    <>
+                      <td className={cell}>{fmtSpan(c.outage!)}</td>
+                      <td className={cn(cell, 'text-right')}>{fmtDuration(c.outage!.endMs - c.outage!.startMs)}</td>
+                      <td className={cn(cell, 'text-right')}>{fmtAmount(e.kwhP50)} kWh</td>
+                      <td className="py-2.5 pl-3 text-right whitespace-nowrap">
+                        {fmtAmount(e.kwhP10)}–{fmtAmount(e.kwhP90)} kWh
+                      </td>
+                    </>
+                  ) : (
+                    <td colSpan={4} className={cn('py-2.5 pl-3', calculating(c) ? 'text-muted-foreground' : 'text-destructive')}>
+                      {missing(c)}
+                    </td>
+                  )}
+                </tr>
+              )
+            })}
+            {done.length > 1 && (
+              <tr className="font-semibold">
+                <td colSpan={3} className="py-2.5 pr-3">
+                  {totalText(done.length, cases.length)}
+                </td>
+                <td className={cn(cell, 'text-right')}>{fmtAmount(done.reduce((sum, c) => sum + c.response!.energy.kwhP50, 0))} kWh</td>
+                <td className="py-2.5 pl-3 text-right font-normal text-muted-foreground">not added</td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+      {done.length > 1 && <p className="text-label text-pretty text-muted-foreground">{TOTAL_HINT}</p>}
+    </Section>
   )
 })
 

@@ -1,4 +1,4 @@
-.PHONY: install dev test fixtures demo harness predict dwd wheel pyodide build serve screenshots robustness
+.PHONY: install dev test fixtures demo harness predict dwd csv wheel pyodide build serve screenshots robustness
 
 install:
 	uv sync
@@ -37,6 +37,11 @@ predict:
 # data/dwd/<pair>/: five real DWD station pairs, downloaded from opendata.dwd.de (not checked in)
 dwd:
 	uv run python -m harness.dwd
+
+# <name>.csv next to every .xlsx in XLSX (default: the challenge data), readable by the import
+XLSX ?= data/data_hackathon_baywa_re
+csv:
+	uv run python -m harness.xlsx $(XLSX)
 
 # Stable file name: the py worker loads py/windgap.whl.
 wheel:

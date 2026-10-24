@@ -89,3 +89,30 @@ If time permits:
 **🏆 What You Can Win**
 
 **€1,000 in prize money for the winning team.**
+## **5. Dataset README** (from `data/data_hackathon_baywa_re/README.docx`)
+
+The dataset supports estimating a wind turbine's energy yield loss during missing measurements from reference turbines in other wind parks. Teams may use individual reference turbines, several turbines or park-level aggregates, as long as the reference data comes from **outside the target wind park**. The choice of reference turbines and parks is up to the teams.
+
+**Structure:** 90 days of 10-minute time series from 10 turbines in three wind parks, plus the power curves of the target turbines. Turbine names are a capital letter (the park) and a number (the turbine), e.g. T1, O2, H3. **Target turbines** start with T; **reference turbines** are all turbines outside the target park.
+
+**Time series** (one file per turbine, e.g. `T1_data.xlsx`):
+
+- `turbine_name`: turbine identifier, constant within a file
+- `timestamp`: date and time of the measurement
+- `wind_speed`: average wind at hub height (the primary parameter)
+- `wind_direction`: may help identify directional effects and differences in exposure between parks
+- `ambient_temperature`
+- `air_pressure`: may add information on atmospheric conditions and air density
+- `wind_speed_stddev`: variability within the interval, may characterize turbulence
+- `test_set`: marks the designated test period
+
+Additional parameters are optional. Air pressure and wind speed standard deviation are unavailable for park O (O1, O2); there, air pressure is a constant estimate of the average pressure at hub height, not a measurement.
+
+**Power curves:** one file per target turbine, `<turbine>_power_curve.xlsx` (e.g. `T1_power_curve.xlsx`), relating wind speed to expected power; to be combined with the predicted wind to estimate the energy yield loss.
+
+**Training and test data:** the 90 days contain a test period, divided into
+
+- **shown test data**, 4–9 September inclusive: measurements available, for conventional performance evaluation;
+- **hidden test data**, 1–3 September inclusive: measurements of the target turbines withheld to simulate an outage and represented by NaN. The judges compare the submitted predictions with the withheld measurements.
+
+**Missing data:** random gaps in all datasets; communication gaps of several hours in July in some training datasets (real communication issues, to be treated as unavailable); the hidden test measurements. All missing values are NaN and must not be read as zero wind or zero power.

@@ -40,7 +40,7 @@ export const OutageStep = observer(function OutageStep() {
                   same(o, outage) && 'border-primary bg-accent text-accent-foreground',
                 )}
               >
-                <span className="font-medium tabular-nums">{fmtDuration(o.endMs - o.startMs)}</span>
+                <span className="font-medium tabular-nums">Duration: {fmtDuration(o.endMs - o.startMs)}</span>
                 <span className="text-label text-muted-foreground">
                   {fmtDayTime(o.startMs)} – {fmtDayTime(o.endMs)}
                 </span>

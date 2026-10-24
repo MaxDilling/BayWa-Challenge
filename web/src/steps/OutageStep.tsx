@@ -62,7 +62,7 @@ export const OutageStep = observer(function OutageStep() {
         title="Timeline"
         description={
           <span className="flex flex-wrap items-center gap-x-4 gap-y-1">
-            <span>Drag across the chart to set the outage, drag its edges to fine-tune; zoom with the slider.</span>
+            <span>Click a detected outage or drag across the chart to set the outage, drag its edges to fine-tune; zoom with the slider.</span>
             <Swatch className="bg-outage-edge/40">Selected outage</Swatch>
             <Swatch className="bg-outage">Other detected outages</Swatch>
             <Swatch className="bg-gap">Measurement gaps under 30 min ({fmtNum(dataset.gaps.length)})</Swatch>
@@ -167,6 +167,13 @@ function Timeline({ dataset, outage }: { dataset: Dataset; outage?: Span }) {
         const [from, to] = extent(dataset)
         const { start, end } = (chart.getOption() as { dataZoom: { start: number; end: number }[] }).dataZoom[0]
         chart.setOption({ xAxis: timeAxis(axisTimes(from + ((to - from) * start) / 100, from + ((to - from) * end) / 100)) })
+      })
+      chart.getZr().off('click')
+      chart.getZr().on('click', ({ offsetX, offsetY }) => {
+        if (!chart.containPixel({ gridIndex: 0 }, [offsetX, offsetY])) return
+        const ms = chart.convertFromPixel({ xAxisIndex: 0 }, offsetX)
+        const hit = dataset.outages.find((o) => o.startMs <= ms && ms < o.endMs)
+        if (hit) store.setOutage(hit)
       })
       chart.off('brushEnd')
       chart.on('brushEnd', (e) => {

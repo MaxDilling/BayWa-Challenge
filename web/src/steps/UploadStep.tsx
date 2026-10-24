@@ -148,20 +148,21 @@ const AssignmentView = observer(function AssignmentView() {
   const { series, fileOf, targetCandidates, powerCurveFile, errors } = assignment!
   const isTarget = (s: WindSeries) => targets.some((t) => t.id === s.id)
   const listed = new Set([...Object.values(fileOf), powerCurveFile])
+  const unused = files.filter((f) => !listed.has(f.name))
   const ask = !targets.length && series.length > 1
   return (
     <>
-      <div className="flex flex-wrap items-center gap-1.5 text-label">
-        <span className="text-muted-foreground">
-          {fmtNum(files.length)} file{files.length === 1 ? '' : 's'}:
-        </span>
-        {files.map((f) => (
-          <Badge key={f.name} variant="outline" className={cn('gap-1', !listed.has(f.name) && 'pr-0.5')}>
-            {f.name}
-            {!listed.has(f.name) && <RemoveFile file={f.name} />}
-          </Badge>
-        ))}
-      </div>
+      {unused.length > 0 && (
+        <div className="flex flex-wrap items-center gap-1.5 text-label">
+          <span className="text-muted-foreground">Not used:</span>
+          {unused.map((f) => (
+            <Badge key={f.name} variant="outline" className="gap-1 pr-0.5">
+              {f.name}
+              <RemoveFile file={f.name} />
+            </Badge>
+          ))}
+        </div>
+      )}
       {ask && (
         <div className="flex flex-wrap items-center gap-2 rounded-lg border border-primary bg-accent px-3 py-2.5 text-accent-foreground">
           <span className="font-medium">Which farm had the outage?</span>

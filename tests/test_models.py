@@ -112,3 +112,29 @@ def test_multi_regression_with_one_reference_is_linear_regression(pair):
     multi = registry.create("multi_regression").fit(train["target"], train[["ref"]])
     assert multi.explain().params == pytest.approx({"a": lr.a, "b_ref_0": lr.b})
     assert multi.predict(test[["ref"]]).to_numpy() == pytest.approx(lr.predict(test[["ref"]]).to_numpy())
+
+
+def test_sector_factor_is_measured_over_predicted_wind_pulled_towards_one():
+    from windgap.models.multi import WAKE_PRIOR_STEPS, _sector_factors
+
+    pred, y, sector = np.array([1.0, 1.0, 2.0, 2.0, 5.0]), np.array([1.0, 1.0, 1.0, 1.0, 9.0]), np.array([0, 0, 1, 1, 2])
+    prior = WAKE_PRIOR_STEPS * 1.5  # mean prediction over the steps with a direction
+    factors, steps = _sector_factors(pred, y, sector, 2)
+    assert factors.tolist() == pytest.approx([1.0, (2 + prior) / (4 + prior), 1.0])
+    assert steps.tolist() == [2, 2]
+
+
+def test_multi_regression_learns_less_wind_from_the_shaded_direction():
+    west = pd.Series(np.where(np.arange(600) % 2, 270.0, 0.0), index=INDEX)
+    target = REF_A * np.where(west == 270, 0.8, 1.0)
+    model = registry.create("multi_regression").fit(target, REF_A.to_frame(), west.to_frame())
+    params = model.explain().params
+    assert params["wake_factor_270"] < 0.95 < 1.05 < params["wake_factor_0"]
+    shaded = model.predict(REF_A.to_frame(), pd.DataFrame({0: 270.0}, index=INDEX))["mean"]
+    north = model.predict(REF_A.to_frame(), pd.DataFrame({0: 0.0}, index=INDEX))["mean"]
+    assert shaded.to_numpy() == pytest.approx(north.to_numpy() * params["wake_factor_270"] / params["wake_factor_0"])
+
+
+def test_without_directions_there_is_no_wake_factor():
+    params = registry.create("multi_regression").fit(REF_A, REF_A.to_frame()).explain().params
+    assert not any(k.startswith("wake_factor") for k in params)

@@ -144,9 +144,12 @@ function FilledCard({ dataset, response }: { dataset: Dataset; response: Analyze
       title="Filled target series"
       description={`The target file in the challenge format (Europe/Berlin time, m/s) with the predicted mean in its ${fmtNum(filled)} missing outage values; Predicted = 1 marks them. Use this file to submit predictions.`}
       action={
-        <Button onClick={() => download(file, csv)}>
-          <Download /> Download filled series
-        </Button>
+        <div className="flex gap-2">
+          {store.targets.length > 1 && <DownloadAll />}
+          <Button onClick={() => download(file, csv)}>
+            <Download /> Download filled series
+          </Button>
+        </div>
       }
     >
       <Table columns={FILLED_HEADER.split(',')} rows={lines.slice(Math.max(first - 2, 1), first + 4).map((l) => l.split(','))} />
@@ -156,6 +159,22 @@ function FilledCard({ dataset, response }: { dataset: Dataset; response: Analyze
     </Section>
   )
 }
+
+/** Every target's filled series with the selected model, one file each; targets without a result are left out. */
+const DownloadAll = observer(function DownloadAll() {
+  const { targets, datasets, resultsByTarget, model } = store
+  const ready = targets.filter((t) => datasets[t.id] && resultsByTarget[t.id]?.[model])
+  return (
+    <Button
+      variant="outline"
+      disabled={ready.length < targets.length}
+      title={ready.length < targets.length ? 'Some targets are still being calculated or failed' : undefined}
+      onClick={() => ready.forEach((t) => download(`${t.id}_filled.csv`, filledTargetCsv(t.grid, [resultsByTarget[t.id][model].prediction])))}
+    >
+      <Download /> All {targets.length} targets
+    </Button>
+  )
+})
 
 function EmailCard({ subject, body }: { subject: string; body: string }) {
   const [copied, setCopied] = useState(false)

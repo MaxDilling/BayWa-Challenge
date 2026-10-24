@@ -37,8 +37,22 @@ datasets:
      scenarios: {t0_step_h: 144}}
   - {name: T3, kind: folder, path: data/data_hackathon_baywa_re, files: [T3_*.csv, "[HO]*.csv"], target: T3_data,
      scenarios: {t0_step_h: 144}}
+  # The same targets with the eight DWD stations of data/dwd_refs/ as extra references (make dwd-refs). on_demand: only
+  # when named in --datasets, so `make harness` stays under 30 s.
+  - {name: T1+dwd, kind: folder, path: data/data_hackathon_baywa_re, files: [T1_*.csv, "[HO]*.csv"], target: T1_data,
+     extra_refs: [data/dwd_refs/*.csv], on_demand: true,
+     scenarios: {t0_step_h: 144}}
+  - {name: T2+dwd, kind: folder, path: data/data_hackathon_baywa_re, files: [T2_*.csv, "[HO]*.csv"], target: T2_data,
+     extra_refs: [data/dwd_refs/*.csv], on_demand: true,
+     scenarios: {t0_step_h: 144}}
+  - {name: T3+dwd, kind: folder, path: data/data_hackathon_baywa_re, files: [T3_*.csv, "[HO]*.csv"], target: T3_data,
+     extra_refs: [data/dwd_refs/*.csv], on_demand: true,
+     scenarios: {t0_step_h: 144}}
 
 # Extra leaderboard rows: a registered model with fixed params. Without the delay τ (M1 instead of M3), to show
 # what the lag search adds.
 variants:
   linear_regression_nolag: {model: linear_regression, params: {lag_max_min: 0}}
+  # Without the factor per wind direction sector, to show what it adds where references carry a direction; on_demand:
+  # only when named in --models (it adds a sixth of the run time).
+  multi_regression_nowake: {model: multi_regression, params: {direction_sectors: 0}, on_demand: true}

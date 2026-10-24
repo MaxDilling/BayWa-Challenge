@@ -10,11 +10,11 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { assignFiles, KNOWN_CURVES, loadDemo, parsePowerCurveCsv, parseWindCsv, turbineCount, type PowerCurve, type WindSeries } from '@/data'
+import { ImportError, KNOWN_CURVES, loadDemo, parsePowerCurveCsv, parseWindCsv, readFiles, turbineCount, type PowerCurve, type WindSeries } from '@/data'
 import { cn } from '@/lib/utils'
 import { store } from '@/state/store'
 
-const WIND_HINT = 'CSV with a timestamp (Europe/Berlin) and the 10-minute wind speed in m/s.'
+const WIND_HINT = 'CSV or Excel with a timestamp (Europe/Berlin) and the 10-minute wind speed in m/s; a wind direction column is used too.'
 
 export const UploadStep = observer(function UploadStep() {
   const { warnings, assignment } = store
@@ -22,6 +22,7 @@ export const UploadStep = observer(function UploadStep() {
     <div className="flex flex-col gap-section">
       <AllFiles />
       <Warnings items={warnings.filter((w) => w.step === 'upload')} />
+      <Stations />
       <RoleZones key={assignment ? 'assigned' : 'by role'} />
     </div>
   )
@@ -29,8 +30,8 @@ export const UploadStep = observer(function UploadStep() {
 
 /** The zones per role: open while files came in one role at a time, a disclosure once the all-files drop assigned them. */
 const RoleZones = observer(function RoleZones() {
-  const { target, references, powerCurve, response, assignment } = store
-  const [open, setOpen] = useState(!assignment && !!(target || references.length || powerCurve))
+  const { targets, references, powerCurve, response, assignment } = store
+  const [open, setOpen] = useState(!assignment && !!(targets.length || references.length || powerCurve))
   const d = response?.explanation.diagnostics
   return (
     <details open={open} onToggle={(e) => setOpen(e.currentTarget.open)}>
@@ -39,14 +40,18 @@ const RoleZones = observer(function RoleZones() {
       </summary>
       <div className="mt-3 grid gap-section lg:grid-cols-3">
         <DropZone
-          title="Target farm"
-          hint={`The farm with the outage. ${WIND_HINT}`}
+          title="Target farm(s)"
+          hint={`One or more farms or turbines with an outage, one file each. ${WIND_HINT}`}
+          multiple
           read={parseWindCsv}
-          onRead={([[t, ...others]]) =>
-            store.setInputs({ target: { ...t, report: { ...t.report, ignoredColumns: [...t.report.ignoredColumns, ...others.map((o) => o.id)] } } })
-          }
+          onRead={(files) => {
+            const added = files.map(([t, ...others]) => ({ ...t, report: { ...t.report, ignoredColumns: [...t.report.ignoredColumns, ...others.map((o) => o.id)] } }))
+            store.setInputs({ targets: [...targets.filter((t) => !added.some((a) => a.id === t.id)), ...added] })
+          }}
         >
-          {target && <SeriesReport series={target} />}
+          {targets.map((t) => (
+            <SeriesReport key={t.id} series={t} onRemove={() => store.setInputs({ targets: targets.filter((x) => x !== t) })} />
+          ))}
         </DropZone>
         <DropZone
           title="Reference farms"
@@ -80,21 +85,35 @@ const RoleZones = observer(function RoleZones() {
   )
 })
 
-async function assignDropped(files: File[]) {
-  store.assign(assignFiles(await Promise.all(files.map(async (f) => ({ name: f.name, text: await f.text() })))))
-}
-
 const AllFiles = observer(function AllFiles() {
   const { assignment } = store
+  const [unreadable, setUnreadable] = useState<{ file: string; message: string }[]>([])
+  async function drop(files: File[]) {
+    const read: Awaited<ReturnType<typeof readFiles>> = []
+    const errors: typeof unreadable = []
+    for (const file of files) {
+      try {
+        read.push(...(await readFiles([file])))
+      } catch (e) {
+        if (!(e instanceof ImportError)) throw e
+        errors.push({ file: file.name, message: e.message })
+      }
+    }
+    setUnreadable(errors)
+    if (read.length) store.addFiles(read)
+  }
   return (
     <Section
       title="All files at once"
-      description="Drop the target, the reference(s) and the power curve together. The power curve is the file without timestamps; the target is the series with the outage."
+      description="Drop the target(s), the reference(s) and the power curve, together or one after the other; CSV and Excel (.xlsx) both work. The power curve is the file without timestamps; targets are the series with an outage."
       action={<Button onClick={() => store.loadDataset(loadDemo())}>Load demo data</Button>}
     >
-      <FileDrop multiple onFiles={assignDropped} className="gap-2 py-8 text-body">
-        Drop all files here (target, reference(s), power curve) or <span className="font-medium text-primary">browse</span>
+      <FileDrop multiple onFiles={drop} className="gap-2 py-8 text-body">
+        Drop files here (targets, references, power curve) or <span className="font-medium text-primary">browse</span>
       </FileDrop>
+      {unreadable.map((e) => (
+        <FileError key={e.file} {...e} />
+      ))}
       {assignment ? (
         <AssignmentView />
       ) : (
@@ -124,17 +143,30 @@ const KnownCurves = observer(function KnownCurves() {
 })
 
 const AssignmentView = observer(function AssignmentView() {
-  const { assignment, target, powerCurve } = store
+  const { assignment, targets, powerCurve, files } = store
   const { series, targetCandidates, errors } = assignment!
-  const chosen = series.find((s) => s.id === target?.id)
-  const ask = !chosen && series.length > 1
+  const isTarget = (s: WindSeries) => targets.some((t) => t.id === s.id)
+  const ask = !targets.length && series.length > 1
   return (
     <>
+      <div className="flex flex-wrap items-center gap-1.5 text-label">
+        <span className="text-muted-foreground">
+          {fmtNum(files.length)} file{files.length === 1 ? '' : 's'}:
+        </span>
+        {files.map((f) => (
+          <Badge key={f.name} variant="outline" className="gap-1 pr-0.5">
+            {f.name}
+            <Button variant="ghost" size="icon-xs" onClick={() => store.removeFile(f.name)} aria-label={`Remove ${f.name}`}>
+              <X />
+            </Button>
+          </Badge>
+        ))}
+      </div>
       {ask && (
         <div className="flex flex-wrap items-center gap-2 rounded-lg border border-primary bg-accent px-3 py-2.5 text-accent-foreground">
           <span className="font-medium">Which farm had the outage?</span>
           {(targetCandidates.length ? targetCandidates : series.map((s) => s.id)).map((id) => (
-            <Button key={id} size="sm" variant="outline" onClick={() => store.chooseTarget(id)}>
+            <Button key={id} size="sm" variant="outline" onClick={() => store.toggleTarget(id)}>
               {id}
             </Button>
           ))}
@@ -145,18 +177,17 @@ const AssignmentView = observer(function AssignmentView() {
           <li key={s.id} className="flex items-center justify-between gap-3 px-3 py-2">
             <span className="min-w-0">
               <span className="block truncate font-medium">{s.id}</span>
-              <span className="block text-muted-foreground tabular-nums">{seriesLine(s)}</span>
-            </span>
-            {s === chosen ? (
-              <Badge>Target</Badge>
-            ) : (
-              <span className="flex items-center gap-2">
-                {chosen && <Badge variant="secondary">Reference</Badge>}
-                <Button size="xs" variant="ghost" onClick={() => store.chooseTarget(s.id)}>
-                  Make target
-                </Button>
+              <span className="block text-muted-foreground tabular-nums">
+                {seriesLine(s)}
+                {s.direction && ' · with wind direction'}
               </span>
-            )}
+            </span>
+            <span className="flex items-center gap-2">
+              {isTarget(s) ? <Badge>Target</Badge> : targets.length > 0 && <Badge variant="secondary">Reference</Badge>}
+              <Button size="xs" variant="ghost" onClick={() => store.toggleTarget(s.id)}>
+                {isTarget(s) ? 'Make reference' : 'Make target'}
+              </Button>
+            </span>
           </li>
         ))}
         <li className="flex items-center justify-between gap-3 px-3 py-2">
@@ -303,3 +334,49 @@ function seriesLine({ grid, report }: WindSeries) {
   const steps = grid.values.length
   return `${fmtDate(grid.t0)} – ${fmtDate(grid.t0 + (steps - 1) * STEP_MS)} · ${fmtPct(report.missing / steps)} missing`
 }
+
+/** DWD weather stations around the challenge farms as extra references; off unless chosen. */
+const Stations = observer(function Stations() {
+  const { dwd, stations, target, outage } = store
+  const [open, setOpen] = useState(stations.length > 0)
+  const end = (s: WindSeries) => s.grid.t0 + s.grid.values.length * STEP_MS
+  const covers = (s: WindSeries) => !outage || (s.grid.t0 <= outage.startMs && end(s) >= outage.endMs)
+  return (
+    <details
+      open={open}
+      onToggle={(e) => {
+        setOpen(e.currentTarget.open)
+        if (e.currentTarget.open) store.loadStations()
+      }}
+    >
+      <summary className="cursor-pointer font-medium text-primary">Add DWD weather stations as references</summary>
+      <Section
+        title="DWD weather stations"
+        className="mt-3"
+        description={
+          <>
+            Wind measured by Germany&apos;s weather service around the challenge farms, at about 10 m height and 10 to 150 km away, from{' '}
+            {dwd.length ? `${fmtDate(dwd[0].grid.t0)} to ${fmtDate(end(dwd[0]) - STEP_MS)}` : 'July to September 2026'}. On the challenge data
+            they did not beat the reference turbines; they help when no reference farm measured. Chosen stations count as references for
+            every target.
+          </>
+        }
+      >
+        <div className="flex flex-wrap gap-2">
+          {dwd.map((s) => (
+            <Button
+              key={s.id}
+              size="sm"
+              variant={stations.includes(s.id) ? 'default' : 'outline'}
+              disabled={!covers(s) && !stations.includes(s.id)}
+              title={covers(s) ? seriesLine(s) : `Does not cover the outage of ${target?.id}`}
+              onClick={() => store.toggleStation(s.id)}
+            >
+              {s.id.replace('DWD_', '')}
+            </Button>
+          ))}
+        </div>
+      </Section>
+    </details>
+  )
+})

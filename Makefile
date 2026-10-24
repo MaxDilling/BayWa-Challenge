@@ -1,4 +1,4 @@
-.PHONY: install dev test fixtures demo harness predict dwd csv wheel pyodide build serve screenshots robustness
+.PHONY: install dev test fixtures demo harness predict dwd dwd-refs csv wheel pyodide build serve screenshots robustness
 
 install:
 	uv sync
@@ -37,6 +37,10 @@ predict:
 # data/dwd/<pair>/: five real DWD station pairs, downloaded from opendata.dwd.de (not checked in)
 dwd:
 	uv run python -m harness.dwd
+
+# data/dwd_refs/: DWD stations around the challenge farms, Jul–Sep 2026, extra references for app and harness (checked in)
+dwd-refs:
+	uv run python -m harness.dwd refs
 
 # <name>.csv next to every .xlsx in XLSX (default: the challenge data), readable by the import
 XLSX ?= data/data_hackathon_baywa_re

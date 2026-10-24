@@ -11,6 +11,7 @@ import json
 import sys
 from pathlib import Path
 
+from harness.datasets import file_texts
 from windgap.core import io
 from windgap.core.grid import series_to_grid, to_ms
 from windgap.core.outage import detect_outages, fill_during_outage
@@ -21,18 +22,22 @@ from windgap.models import registry
 def predict(target: Path, references: list[Path], power_curve: Path, n_turbines: int, model: str
             ) -> tuple[str, list[str], list[str]]:
     """(filled target CSV, one line per filled outage, one line per outage that could not be filled)."""
-    sites = io.read_wind_csv(target.stem, target.read_text())
+    sites = [site for name, text in file_texts(target) for site, _ in io.read_wind_csv(name, text)]
     if len(sites) != 1:
-        raise io.CsvError(f"{target}: expected one wind column, found {', '.join(s.site_id for s, _ in sites)}.")
-    tgt = sites[0][0].wind
-    refs = [site.wind for path in references for site, _ in io.read_wind_csv(path.stem, path.read_text())]
-    curve = io.read_power_curve_csv(power_curve.read_text())
+        raise io.CsvError(f"{target}: expected one wind column, found {', '.join(s.site_id for s in sites)}.")
+    tgt = sites[0].wind
+    ref_sites = [site for path in references for name, text in file_texts(path) for site, _ in io.read_wind_csv(name, text)]
+    refs = [site.wind for site in ref_sites]
+    [(_, curve_text)] = file_texts(power_curve)
+    curve = io.read_power_curve_csv(curve_text)
     predictions, filled, failed = [], [], []
     for outage in detect_outages(tgt, refs)[0]:
         span = f"{outage.start:%Y-%m-%d %H:%M} – {outage.end:%Y-%m-%d %H:%M} UTC"
         request = {
             "target": series_to_grid(tgt),
-            "references": [{"id": r.name, "grid": series_to_grid(fill_during_outage(r, outage))} for r in refs],
+            "references": [{"id": s.site_id, "grid": series_to_grid(fill_during_outage(s.wind, outage)),
+                            **({"direction": series_to_grid(s.extra["direction"])} if s.extra is not None else {})}
+                           for s in ref_sites],
             "powerCurve": {"windMs": curve.wind_ms.tolist(), "powerKw": curve.power_kw.tolist(), "nTurbines": n_turbines},
             "outage": {"startMs": to_ms(outage.start), "endMs": to_ms(outage.end)},
             "model": model,

@@ -29,13 +29,16 @@ def demo_prediction() -> str:
     return csv
 
 
-def _request(target: pd.Series, refs: dict[str, pd.Series], start: pd.Timestamp, steps: int, model: str) -> dict:
+def _request(target: pd.Series, refs: dict[str, pd.Series], start: pd.Timestamp, steps: int, model: str,
+             directions: dict[str, pd.Series] | None = None) -> dict:
     curve = generic_power_curve(n_turbines=4)
     target = target.round(2)
     target[(target.index >= start) & (target.index < start + steps * STEP)] = np.nan
     return {
         "target": series_to_grid(target),
-        "references": [{"id": rid, "grid": series_to_grid(s.round(2))} for rid, s in refs.items()],
+        "references": [{"id": rid, "grid": series_to_grid(s.round(2)),
+                        **({"direction": series_to_grid(directions[rid])} if rid in (directions or {}) else {})}
+                       for rid, s in refs.items()],
         "powerCurve": {"windMs": curve.wind_ms.tolist(), "powerKw": curve.power_kw.tolist(), "nTurbines": 4},
         "outage": {"startMs": to_ms(start), "endMs": to_ms(start + steps * STEP)},
         "model": model,
@@ -52,7 +55,17 @@ def cases(model: str) -> dict[str, dict]:
     target.iloc[300:302] = np.nan
     target.iloc[500:510] = np.nan
 
+    # The target loses 15 % of its wind when ref_a's direction is within 30° of west (the wake of a neighbour);
+    # directions end in .x5 so that no value falls on a sector edge, where the two engines might round apart
+    walk = np.cumsum(np.random.default_rng(4).normal(0, 8, len(multi)))
+    direction = pd.Series((200 + walk) % 360, index=multi.index).round(1) + 0.05
+    direction.iloc[100:110] = np.nan
+    shaded = ((direction - 270 + 180) % 360 - 180).abs() < 30
+    waked = target.where(~shaded, target * 0.85)
+
     return {
+        "directions": _request(waked, {"ref_a": multi["ref"], "ref_b": ref_b}, multi.index[4 * 144], 144, model,
+                               {"ref_a": direction}),
         "basic": _request(basic["target"], {"ref_a": basic["ref"]}, basic.index[3 * 144 + 72], 36, model),
         "decoy_first": _request(basic["target"], {"far_away": synthetic_pair(days=4, seed=9)["ref"], "ref_a": basic["ref"]},
                                 basic.index[3 * 144 + 72], 36, model),

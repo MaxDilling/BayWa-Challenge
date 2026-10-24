@@ -33,6 +33,14 @@ def nan_to_none(values) -> list[float | None]:
     return [None if np.isnan(v) else float(v) for v in np.asarray(values, dtype=float)]
 
 
+def directions(series: list[pd.Series | None], index: pd.DatetimeIndex) -> pd.DataFrame | None:
+    """Models' `extra` (SPEC.md S3): one column per reference with its wind direction in degrees on `index`, NaN where
+    unknown; None when no reference has a direction."""
+    if all(s is None for s in series):
+        return None
+    return pd.DataFrame({i: np.nan if s is None else s.reindex(index) for i, s in enumerate(series)}, index=index)
+
+
 def align(series: list[pd.Series]) -> pd.DataFrame:
     """Join series on one gap-free 10-minute grid spanning all of them."""
     df = pd.concat(series, axis=1, sort=True)

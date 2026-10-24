@@ -66,6 +66,8 @@ Was H eingrenzt: Norddeutschland, eher östlich der Linie Sievern–Apelern; min
 
 ## Die Leistungskurve der Challenge ist eine Nordex-Kurve, nicht die Bonus
 
+**Entscheidung im Team (24.10.): Für T gehen wir von Nordex aus**, also von der Kurve der Challenge. Die Bonus-Kurve bleibt Hintergrund für die Präsentation.
+
 Die drei identischen Kurven `T*_power_curve.xlsx` beschreiben eine moderne 4,5-MW-Anlage: Einschalten bei 3 m/s, 4.500 kW ab 11,5 m/s, ab 20,5 m/s abgeregelt bis 2.529 kW bei 26 m/s. Die AN Bonus 1 MW/54 in Sievern hat 1.000 kW, stallgeregelt; ihre Kurve liegt in `data/power_curves/an_bonus_1000_54.csv` (Herstellerdokumentation über mwps.world).
 
 **Treffer:** die Nordex-Tabelle mit 5.000 kW je Luftdichte, die das Team gefunden hat ([nordex_5000kw_dichte.csv](nordex_5000kw_dichte.csv); Typ und Dokument noch zu benennen).

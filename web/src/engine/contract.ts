@@ -22,8 +22,8 @@ export interface ModelInfo {
 
 export interface AnalyzeRequest {
   target: Grid
-  /** Complete during the outage: gap filling happens at import, not in the engine. */
-  references: { id: string; grid: Grid }[]
+  /** grid is complete during the outage: gap filling happens at import, not in the engine. direction: degrees, gaps allowed. */
+  references: { id: string; grid: Grid; direction?: Grid }[]
   powerCurve: { windMs: number[]; powerKw: number[]; nTurbines: number }
   /** endMs exclusive */
   outage: { startMs: number; endMs: number }

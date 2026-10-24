@@ -25,7 +25,7 @@ export const MAX_REFERENCE_FILL_STEPS = 6
 export function toRequest(dataset: Dataset, outage: Span, model: string, params?: AnalyzeRequest['params']): AnalyzeRequest {
   return {
     target: dataset.target.grid,
-    references: dataset.references.map((r) => ({ id: r.id, grid: fillDuringOutage(r, outage) })),
+    references: dataset.references.map((r) => ({ id: r.id, grid: fillDuringOutage(r, outage), ...(r.direction && { direction: r.direction }) })),
     powerCurve: { ...dataset.powerCurve, nTurbines: dataset.nTurbines },
     outage,
     model,

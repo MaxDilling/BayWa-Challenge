@@ -8,6 +8,7 @@ import { MultiRegression } from './multi'
 type Params = Record<string, number | string>
 
 const lagMax = (p: Params) => (p.lag_max_min === undefined ? undefined : Number(p.lag_max_min))
+const sectors = (p: Params) => (p.direction_sectors === undefined ? undefined : Number(p.direction_sectors))
 
 const MODELS: Record<string, { label: string; tagline: string; create: (p: Params) => WindModel }> = {
   identity: {
@@ -23,7 +24,7 @@ const MODELS: Record<string, { label: string; tagline: string; create: (p: Param
   multi_regression: {
     label: 'Multiple regression (MCP)',
     tagline: 'Least-squares weights over all reference farms, each shifted by its own delay.',
-    create: (p) => new MultiRegression(lagMax(p)),
+    create: (p) => new MultiRegression(lagMax(p), sectors(p)),
   },
   variance_ratio: {
     label: 'Variance ratio (MCP)',

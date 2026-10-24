@@ -142,6 +142,10 @@ def lagged_pairs(x: np.ndarray, y: np.ndarray, lag: int) -> tuple[np.ndarray, np
 
 
 def correlation(x: np.ndarray, y: np.ndarray) -> float:
-    """Pearson r over the steps where both are measured."""
+    """Pearson r over the steps where both are measured (the lag search calls it thousands of times per harness run,
+    np.corrcoef is several times slower)."""
     ok = ~np.isnan(x) & ~np.isnan(y)
-    return float(np.corrcoef(x[ok], y[ok])[0, 1]) if ok.sum() > 1 else float("nan")
+    if ok.sum() < 2:
+        return float("nan")
+    xc, yc = x[ok] - x[ok].mean(), y[ok] - y[ok].mean()
+    return float(xc @ yc / np.sqrt((xc @ xc) * (yc @ yc)))

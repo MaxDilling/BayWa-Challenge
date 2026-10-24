@@ -2,6 +2,16 @@
 import { correlation, mean, type Frame } from '../frame'
 import { bestLag, calibrate, gaussianPrediction, type Errors, type Explanation, type WindModel } from './base'
 
+const WAKE_PRIOR_STEPS = 144
+const SUMMARY =
+  'The missing wind speed is a weighted sum of all reference wind speeds, each shifted by its own delay τ; the ' +
+  'weights are fitted by least squares on the time all farms measured, so references that agree with the target ' +
+  'count more and their independent errors partly cancel. A reference that would get a negative weight is left out.'
+const WAKE_SUMMARY =
+  ' A factor per wind direction sector then corrects what the references cannot see, such as the wake of a ' +
+  'neighbouring turbine: it is the measured over the predicted wind in that sector before the outage, pulled towards ' +
+  '1 where the sector has few values.'
+
 export class MultiRegression implements WindModel {
   errors!: Errors
   private lagMax: number
@@ -12,12 +22,16 @@ export class MultiRegression implements WindModel {
   private b: number[] = []
   private r = NaN
   private nTrain = 0
+  private sectors: number
+  private factors: number[] = [1]
+  private sectorSteps: number[] = []
 
-  constructor(lagMaxMin = 60) {
+  constructor(lagMaxMin = 60, directionSectors = 12) {
     this.lagMax = Math.floor(lagMaxMin / 10)
+    this.sectors = Math.trunc(directionSectors)
   }
 
-  fit(target: Float64Array, refs: Frame) {
+  fit(target: Float64Array, refs: Frame, extra?: Frame) {
     const best = refs.cols.map((x) => bestLag(x, target, this.lagMax))
     this.rRefs = best.map(([r]) => r)
     this.lags = best.map(([, lag]) => lag)
@@ -35,31 +49,61 @@ export class MultiRegression implements WindModel {
     }
     this.nTrain = rows.length
     const inputs = this.used.map((i) => x[i])
-    this.r = correlation(combine(this.a, this.b, inputs), target)
-    this.errors = calibrate(inputs, target, (tx, ty) => {
-      const [a, b] = leastSquares(tx, ty)
-      return (v) => combine(a, b, v)
+    const plain = combine(this.a, this.b, inputs)
+    const sector = this.sector(extra, target.length)
+    ;[this.factors, this.sectorSteps] = sectorFactors(plain, target, sector, this.sectors)
+    this.r = correlation(plain.map((p, t) => p * this.factors[sector[t]]), target)
+    this.errors = calibrate([...inputs, sector], target, (tx, ty) => {
+      const s = tx[tx.length - 1]
+      const [a, b] = leastSquares(tx.slice(0, -1), ty)
+      const [factors] = sectorFactors(combine(a, b, tx.slice(0, -1)), ty, s, this.sectors)
+      return (v) => combine(a, b, v.slice(0, -1)).map((p, t) => p * factors[v[v.length - 1][t]])
     })
     return this
   }
 
+  /** Direction sector per step (0 = centred on north) from the circular mean of the references' directions;
+   * `sectors` where no reference has a direction. */
+  private sector(extra: Frame | undefined, n: number): Float64Array {
+    const out = new Float64Array(n).fill(this.sectors)
+    if (!extra || !this.sectors) return out
+    const width = 360 / this.sectors
+    for (let t = 0; t < n; t++) {
+      let s = 0
+      let c = 0
+      const known = extra.cols.filter((col) => !Number.isNaN(col[t]))
+      for (const col of known) {
+        s += Math.sin(col[t] * (Math.PI / 180))
+        c += Math.cos(col[t] * (Math.PI / 180))
+      }
+      const mean = (((Math.atan2(s, c) * (180 / Math.PI)) % 360) + 360) % 360
+      if (known.length) out[t] = Math.floor((mean + width / 2) / width) % this.sectors
+    }
+    return out
+  }
+
   /** Beyond the edges of `refs` the edge value stands in; callers pass context (predictWindow). */
-  predict(refs: Frame) {
+  predict(refs: Frame, extra?: Frame) {
     const n = refs.cols[0].length
     const inputs = this.used.map((i) => refs.cols[i].map((_, t) => refs.cols[i][Math.min(Math.max(t - this.lags[i], 0), n - 1)]))
-    const m = combine(this.a, this.b, inputs)
+    const sector = this.sector(extra, n)
+    const m = combine(this.a, this.b, inputs).map((p, t) => p * this.factors[sector[t]])
     return gaussianPrediction(m, this.errors.sigma(m))
   }
 
   explain(): Explanation {
     const refs = this.rRefs.map((_, i) => i)
+    const sectors = this.sectorSteps.flatMap((n, s) => (n ? [[String((s * 360) / this.sectors), s] as const] : []))
     return {
-      summary:
-        'The missing wind speed is a weighted sum of all reference wind speeds, each shifted by its own delay τ; the ' +
-        'weights are fitted by least squares on the time all farms measured, so references that agree with the target ' +
-        'count more and their independent errors partly cancel. A reference that would get a negative weight is left out.',
-      formula: '\\hat{v}_t = a + \\sum_i b_i \\cdot v_i(t - \\tau_i)',
-      params: { a: this.a, ...Object.fromEntries(refs.map((i) => [`b_ref_${i}`, this.used.includes(i) ? this.b[this.used.indexOf(i)] : 0])) },
+      summary: SUMMARY + (sectors.length ? WAKE_SUMMARY : ''),
+      formula: sectors.length
+        ? '\\hat{v}_t = f_{s(t)} \\cdot \\Big(a + \\sum_i b_i \\cdot v_i(t - \\tau_i)\\Big)'
+        : '\\hat{v}_t = a + \\sum_i b_i \\cdot v_i(t - \\tau_i)',
+      params: {
+        a: this.a,
+        ...Object.fromEntries(refs.map((i) => [`b_ref_${i}`, this.used.includes(i) ? this.b[this.used.indexOf(i)] : 0])),
+        ...Object.fromEntries(sectors.map(([deg, s]) => [`wake_factor_${deg}`, this.factors[s]])),
+      },
       diagnostics: {
         r: this.r,
         n_train: this.nTrain,
@@ -68,9 +112,29 @@ export class MultiRegression implements WindModel {
         error_memory_h: this.errors.memoryH,
         ...Object.fromEntries(refs.map((i) => [`lag_min_ref_${i}`, this.lags[i] * 10])),
         ...(refs.length > 1 ? Object.fromEntries(refs.map((i) => [`r_ref_${i}`, this.rRefs[i]])) : {}),
+        ...Object.fromEntries(sectors.map(([deg, s]) => [`wake_steps_${deg}`, this.sectorSteps[s]])),
       },
     }
   }
+}
+
+/** [f per sector plus 1 for "no direction" at index n, measured steps per sector]:
+ * f_s = (Σ_s y + k · m) / (Σ_s ŷ + k · m) with k = WAKE_PRIOR_STEPS and m the mean prediction. */
+function sectorFactors(pred: Float64Array, y: Float64Array, sector: Float64Array, n: number): [number[], number[]] {
+  const factors = new Array<number>(n + 1).fill(1)
+  const steps = new Array<number>(n).fill(0)
+  const ok = [...pred.keys()].filter((t) => !Number.isNaN(pred[t]) && !Number.isNaN(y[t]) && sector[t] < n)
+  if (!ok.length) return [factors, steps]
+  const prior = WAKE_PRIOR_STEPS * mean(Float64Array.from(ok, (t) => pred[t]))
+  const sumY = new Array<number>(n).fill(0)
+  const sumPred = new Array<number>(n).fill(0)
+  for (const t of ok) {
+    sumY[sector[t]] += y[t]
+    sumPred[sector[t]] += pred[t]
+    steps[sector[t]]++
+  }
+  for (let s = 0; s < n; s++) factors[s] = (sumY[s] + prior) / (sumPred[s] + prior)
+  return [factors, steps]
 }
 
 /** a + Σ b_k · x_k per row; NaN where an input is missing. */

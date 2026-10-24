@@ -41,7 +41,7 @@ def run(pairs: list[Pair], models: dict[str, tuple[str, dict]], cfg: dict, holdo
                 skipped[pair.name] += 1
                 continue
             for label, (model, params) in models.items():
-                _, metrics = fold(model, params, pair.target, refs, pair.curve, t0, end)
+                _, metrics = fold(model, params, pair.target, refs, pair.curve, t0, end, pair.extra)
                 if metrics:
                     rows.append({"model": label, "dataset": pair.name, "length_h": hours, "t0": t0, **metrics})
     return pd.DataFrame(rows), skipped

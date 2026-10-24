@@ -5,4 +5,5 @@ Fakten und Recherchen rund um die Challenge, die weder Spezifikation (SPEC.md) n
 - [turbinen.md](turbinen.md): Welche Parks, Anlagen und Typen hinter T (Uetze), H (Hankensbüttel) und O (Apelern) stecken, was die Daten über Zeit und Windrichtung verraten, und was die 4,5-MW-Kurve der Challenge ist.
 - [nordex_5000kw_dichte.csv](nordex_5000kw_dichte.csv): Nordex-Leistungskurve (5.000 kW) je Luftdichte 0,900–1,100 kg/m³, Ursprung der Challenge-Kurve.
 - [baywa_anlagen.csv](baywa_anlagen.csv): die Anlagen von BayWa (auch Wilhelmshöhe, im MaStR ohne BayWa-Namen) und von Hankensbüttel (H) aus dem MaStR mit Typ, Nabe, Koordinaten, Geländehöhe und Zuordnung zu den Daten.
+- [genauigkeit.md](genauigkeit.md): wie wir Genauigkeit messen, der gezeigte Test 04.–09.09. wie die Jury und die 207 Harness-Ausfälle, je Methode.
 - [fragen_organisatoren.md](fragen_organisatoren.md): offene Fragen an die Organisatoren, auf Englisch zum Abschicken, mit unserer Annahme bis zur Antwort.

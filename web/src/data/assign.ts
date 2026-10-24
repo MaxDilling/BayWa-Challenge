@@ -12,20 +12,17 @@ export interface Assignment {
   targetCandidates: string[]
   /** Candidates whose longest outage is more than half the first's; a target is never a reference. */
   targets: string[]
-  /** Set when exactly one file has no timestamps. */
-  powerCurve?: PowerCurve
-  powerCurveFile?: string
-  /** Turbine count stated in the power curve's file name or first lines. */
-  turbines?: number
+  /** Every file without timestamps; `turbines` is a count stated in its name or first lines. */
+  curves: { file: string; curve: PowerCurve; turbines?: number }[]
   /** Files that could not be read or assigned; the other files are assigned anyway. */
   errors: { file: string; message: string }[]
 }
 
-/** Sorts files dropped together into power curve, wind series and target candidates (SPEC.md S1). */
+/** Sorts files dropped together into power curves, wind series and target candidates (SPEC.md S1). */
 export function assignFiles(files: { name: string; text: string }[]): Assignment {
   const series: WindSeries[] = []
   const fileOf: Record<string, string> = {}
-  const curves: { file: string; curve: PowerCurve; turbines?: number }[] = []
+  const curves: Assignment['curves'] = []
   const errors: Assignment['errors'] = []
   for (const { name, text } of files) {
     try {
@@ -43,8 +40,6 @@ export function assignFiles(files: { name: string; text: string }[]): Assignment
       errors.push({ file: name, message: e.message })
     }
   }
-  if (curves.length > 1)
-    errors.push({ file: curves.map((c) => c.file).join(', '), message: 'Several files look like power curves; drop only one.' })
 
   const longest = new Map(
     series.map((s) => {
@@ -59,7 +54,7 @@ export function assignFiles(files: { name: string; text: string }[]): Assignment
     fileOf,
     targetCandidates,
     targets: targetCandidates.filter((id) => longest.get(id)! * 2 > first),
-    ...(curves.length === 1 && { powerCurve: curves[0].curve, powerCurveFile: curves[0].file, turbines: curves[0].turbines }),
+    curves,
     errors,
   }
 }

@@ -43,12 +43,10 @@ async function shot(page, file) {
   shots.push(file)
 }
 
-/** The report as "Save as PDF" would write it; window.print only marks that the report is ready. */
+/** The PDF report as the Export step downloads it. */
 async function report(page, file) {
-  await page.evaluate(() => (window.print = () => (document.body.dataset.printed = 'yes')))
-  await page.getByRole('button', { name: 'Download report (PDF)' }).click()
-  await page.locator('body[data-printed]').waitFor({ state: 'attached', timeout: 60_000 })
-  await page.pdf({ path: join(out, file), preferCSSPageSize: true })
+  const [download] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'Download report (PDF)' }).click()])
+  await download.saveAs(join(out, file))
   shots.push(file)
 }
 

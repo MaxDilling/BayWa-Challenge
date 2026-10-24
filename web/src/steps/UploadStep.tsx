@@ -1,4 +1,4 @@
-import { Check, X } from 'lucide-react'
+import { X } from 'lucide-react'
 import { observer } from 'mobx-react-lite'
 import { useCallback, useState, type ReactNode } from 'react'
 import { Chart, type ChartTheme } from '@/components/charts/Chart'
@@ -10,6 +10,8 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { ImportError, KNOWN_CURVES, parsePowerCurveCsv, parseWindCsv, readFiles, turbineCount, type PowerCurve, type WindSeries } from '@/data'
 import { cn } from '@/lib/utils'
 import { ASK_TURBINES, store } from '@/state/store'
@@ -30,8 +32,8 @@ export const UploadStep = observer(function UploadStep() {
 
 /** The zones per role: open while files came in one role at a time, a disclosure once the all-files drop assigned them. */
 const RoleZones = observer(function RoleZones() {
-  const { targets, references, powerCurve, response, assignment } = store
-  const [open, setOpen] = useState(!assignment && !!(targets.length || references.length || powerCurve))
+  const { targets, references, roleCurves, response, assignment } = store
+  const [open, setOpen] = useState(!assignment && !!(targets.length || references.length || roleCurves.length))
   const d = response?.explanation.diagnostics
   return (
     <details open={open} onToggle={(e) => setOpen(e.currentTarget.open)}>
@@ -50,7 +52,7 @@ const RoleZones = observer(function RoleZones() {
           }}
         >
           {targets.map((t) => (
-            <SeriesReport key={t.id} series={t} onRemove={() => store.setInputs({ targets: targets.filter((x) => x !== t) })} />
+            <SeriesReport key={t.id} series={t} target onRemove={() => store.setInputs({ targets: targets.filter((x) => x !== t) })} />
           ))}
         </DropZone>
         <DropZone
@@ -76,9 +78,11 @@ const RoleZones = observer(function RoleZones() {
           title="Power curve"
           hint="CSV with wind speed (m/s) and power (kW) of one turbine."
           read={(name, text) => ({ name, curve: parsePowerCurveCsv(text), turbines: turbineCount(name, text) })}
-          onRead={([upload]) => store.setUploadedCurve(upload)}
+          onRead={([upload]) => store.addRoleCurve(upload)}
         >
-          {powerCurve && <CurveReport curve={powerCurve} />}
+          {roleCurves.map((c) => (
+            <CurveReport key={c.name} {...c} onRemove={() => store.removeRoleCurve(c.name)} />
+          ))}
         </DropZone>
       </div>
     </details>
@@ -123,31 +127,56 @@ const AllFiles = observer(function AllFiles() {
           </p>
         )
       )}
-      <KnownCurves />
-      {ASK_TURBINES && store.powerCurve && <TurbineDecision />}
+      {ASK_TURBINES && store.dataset && <TurbineDecision />}
     </Section>
   )
 })
 
-const KnownCurves = observer(function KnownCurves() {
-  const { uploadedCurve } = store
+/** A target's power curve: the uploaded ones and the built-in ones; `defaultCurve` until the user picks. */
+const CurveSelect = observer(function CurveSelect({ target }: { target: string }) {
   return (
-    <div className="flex flex-wrap items-center gap-2 text-label">
-      <span className="text-muted-foreground">{uploadedCurve ? 'Power curve' : 'No power curve file? Use the published curve of'}</span>
-      {[...(uploadedCurve ? [uploadedCurve] : []), ...KNOWN_CURVES].map(({ name, curve }) => (
-        <Button key={name} size="sm" variant={store.powerCurve === curve ? 'default' : 'outline'} onClick={() => store.chooseCurve(curve)}>
-          {name}
-        </Button>
-      ))}
-    </div>
+    <Select value={store.curveOf(target).name} onValueChange={(name) => store.chooseCurve(target, name)}>
+      <SelectTrigger size="sm" aria-label={`Power curve of ${target}`} className="w-48 bg-card text-label [&>span]:truncate">
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        {[...store.uploadedCurves, ...KNOWN_CURVES].map(({ name }) => (
+          <SelectItem key={name} value={name}>
+            {name}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
   )
 })
 
+/** Target or reference as a switch of fixed width: the chosen side green, the other grey. */
+function RoleSwitch({ target, onToggle }: { target: boolean; onToggle: () => void }) {
+  return (
+    <ToggleGroup
+      type="single"
+      size="sm"
+      spacing={0}
+      value={target ? 'target' : 'reference'}
+      onValueChange={(role) => role && onToggle()}
+      aria-label="Role"
+      className="rounded-lg bg-muted [&_[data-state=on]]:bg-primary [&_[data-state=on]]:text-primary-foreground"
+    >
+      <ToggleGroupItem value="target" className="w-20">
+        Target
+      </ToggleGroupItem>
+      <ToggleGroupItem value="reference" className="w-20 text-muted-foreground">
+        Reference
+      </ToggleGroupItem>
+    </ToggleGroup>
+  )
+}
+
 const AssignmentView = observer(function AssignmentView() {
-  const { assignment, targets, powerCurve, files } = store
-  const { series, fileOf, targetCandidates, powerCurveFile, errors } = assignment!
+  const { assignment, targets, files } = store
+  const { series, fileOf, targetCandidates, curves, errors } = assignment!
   const isTarget = (s: WindSeries) => targets.some((t) => t.id === s.id)
-  const listed = new Set([...Object.values(fileOf), powerCurveFile])
+  const listed = new Set([...Object.values(fileOf), ...curves.map((c) => c.file)])
   const unused = files.filter((f) => !listed.has(f.name))
   const ask = !targets.length && series.length > 1
   return (
@@ -175,7 +204,7 @@ const AssignmentView = observer(function AssignmentView() {
       )}
       <ul className="flex flex-col divide-y rounded-lg border text-label">
         {series.map((s) => (
-          <li key={s.id} className="flex items-center justify-between gap-3 px-3 py-2">
+          <li key={s.id} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 px-3 py-2">
             <span className="min-w-0">
               <span className="block truncate font-medium">{s.id}</span>
               <span className="block text-muted-foreground tabular-nums">
@@ -183,31 +212,34 @@ const AssignmentView = observer(function AssignmentView() {
                 {s.direction && ' · with wind direction'}
               </span>
             </span>
-            <span className="flex items-center gap-2">
-              {isTarget(s) ? <Badge>Target</Badge> : targets.length > 0 && <Badge variant="secondary">Reference</Badge>}
-              <Button size="xs" variant="ghost" onClick={() => store.toggleTarget(s.id)}>
-                {isTarget(s) ? 'Make reference' : 'Make target'}
-              </Button>
+            <span className="ml-auto flex items-center gap-2">
+              {isTarget(s) && <CurveSelect target={s.id} />}
+              <RoleSwitch target={isTarget(s)} onToggle={() => store.toggleTarget(s.id)} />
               <RemoveFile file={fileOf[s.id]} />
             </span>
           </li>
         ))}
-        <li className="flex items-center justify-between gap-3 px-3 py-2">
-          <span className="min-w-0">
-            <span className="block font-medium">Power curve</span>
-            {powerCurveFile && <span className="block truncate text-muted-foreground">{powerCurveFile}</span>}
-          </span>
-          {powerCurveFile ? (
-            <span className="flex items-center gap-2">
-              <Badge variant="secondary">
-                <Check /> found
-              </Badge>
-              <RemoveFile file={powerCurveFile} />
-            </span>
-          ) : (
-            <span className="text-muted-foreground">{powerCurve ? 'kept from before' : 'not among the files; pick a turbine or add it below'}</span>
-          )}
-        </li>
+        {curves.map(({ file }) => {
+          const users = targets.filter((t) => store.curveOf(t.id).name === file).map((t) => t.id)
+          return (
+            <li key={file} className="flex items-center justify-between gap-3 px-3 py-2">
+              <span className="min-w-0">
+                <span className="block font-medium">Power curve</span>
+                <span className="block truncate text-muted-foreground">{file}</span>
+              </span>
+              <span className="flex items-center gap-2">
+                <span className="text-muted-foreground">{users.length ? `for ${users.join(', ')}` : 'not chosen for a target'}</span>
+                <RemoveFile file={file} />
+              </span>
+            </li>
+          )
+        })}
+        {!curves.length && (
+          <li className="flex items-center justify-between gap-3 px-3 py-2">
+            <span className="font-medium">Power curve</span>
+            <span className="text-muted-foreground">none among the files; each target uses a built-in curve</span>
+          </li>
+        )}
       </ul>
       {errors.map((e) => (
         <FileError key={e.file} {...e} />
@@ -216,14 +248,16 @@ const AssignmentView = observer(function AssignmentView() {
   )
 })
 
-/** Removes a dropped file with every series it holds. */
-function RemoveFile({ file }: { file: string }) {
+function Remove({ what, onClick }: { what: string; onClick: () => void }) {
   return (
-    <Button variant="ghost" size="icon-xs" onClick={() => store.removeFile(file)} aria-label={`Remove ${file}`} title={`Remove ${file}`}>
+    <Button variant="ghost" size="icon-xs" onClick={onClick} aria-label={`Remove ${what}`} title={`Remove ${what}`}>
       <X />
     </Button>
   )
 }
+
+/** Removes a dropped file with every series it holds. */
+const RemoveFile = ({ file }: { file: string }) => <Remove what={file} onClick={() => store.removeFile(file)} />
 
 function Facts({ title, action, rows }: { title: string; action?: ReactNode; rows: [string, ReactNode][] }) {
   return (
@@ -244,7 +278,7 @@ function Facts({ title, action, rows }: { title: string; action?: ReactNode; row
   )
 }
 
-function SeriesReport({ series, correlation, onRemove }: { series: WindSeries; correlation?: number; onRemove?: () => void }) {
+function SeriesReport({ series, target, correlation, onRemove }: { series: WindSeries; target?: boolean; correlation?: number; onRemove: () => void }) {
   const { grid, report } = series
   const steps = grid.values.length
   const rows: [string, ReactNode][] = [
@@ -256,19 +290,8 @@ function SeriesReport({ series, correlation, onRemove }: { series: WindSeries; c
   if (report.negative) rows.push(['Negative', `${fmtNum(report.negative)}, counted as missing`])
   if (report.ignoredColumns.length) rows.push(['Ignored columns', report.ignoredColumns.join(', ')])
   if (correlation !== undefined) rows.push(['Correlation r', `${fmtNum(correlation, 3)} with the target, before the outage`])
-  return (
-    <Facts
-      title={series.id}
-      rows={rows}
-      action={
-        onRemove && (
-          <Button variant="ghost" size="icon-xs" onClick={onRemove} aria-label={`Remove ${series.id}`}>
-            <X />
-          </Button>
-        )
-      }
-    />
-  )
+  if (target) rows.push(['Power curve', <CurveSelect target={series.id} />])
+  return <Facts title={series.id} rows={rows} action={<Remove what={series.id} onClick={onRemove} />} />
 }
 
 function curveOption({ windMs, powerKw }: PowerCurve, t: ChartTheme) {
@@ -281,14 +304,15 @@ function curveOption({ windMs, powerKw }: PowerCurve, t: ChartTheme) {
   }
 }
 
-const CurveReport = observer(function CurveReport({ curve }: { curve: PowerCurve }) {
+const CurveReport = observer(function CurveReport({ name, curve, onRemove }: { name: string; curve: PowerCurve; onRemove: () => void }) {
   const option = useCallback((t: ChartTheme) => curveOption(curve, t), [curve])
   const rated = Math.max(...curve.powerKw)
   const producing = curve.windMs.filter((_, i) => curve.powerKw[i] > 0)
   return (
     <>
       <Facts
-        title="Turbine power curve"
+        title={name}
+        action={<Remove what={name} onClick={onRemove} />}
         rows={[
           ['Points', fmtNum(curve.windMs.length)],
           ['Rated power', `${fmtAmount(rated)} kW per turbine · ${fmtAmount(rated * store.nTurbines)} kW farm`],
@@ -302,9 +326,9 @@ const CurveReport = observer(function CurveReport({ curve }: { curve: PowerCurve
 
 /** The farm size multiplies every kWh, so it is a decision, highlighted until the user confirms it. */
 const TurbineDecision = observer(function TurbineDecision() {
-  const { nTurbines, turbinesConfirmed, turbinesSource, powerCurve } = store
+  const { nTurbines, turbinesConfirmed, turbinesSource, dataset } = store
   const [draft, setDraft] = useState<string>()
-  const rated = Math.max(...powerCurve!.powerKw)
+  const rated = Math.max(...dataset!.powerCurve.powerKw)
   return (
     <div
       className={cn(

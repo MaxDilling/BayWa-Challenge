@@ -1,7 +1,7 @@
 import { readdirSync, readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { analyze } from '@/engine/ts/tsEngine'
-import { assignFiles, buildDataset, DEMO_FILES, filledTargetCsv, parsePowerCurveCsv, parseWindCsv, plausibility, toRequest, turbineCount } from '.'
+import { assignFiles, buildDataset, defaultCurve, DEMO_FILES, filledTargetCsv, parsePowerCurveCsv, parseWindCsv, plausibility, toRequest, turbineCount } from '.'
 import { isSummerTime } from './berlin'
 import { detectOutages } from './outage'
 import { xlsxTexts } from './xlsx'
@@ -63,9 +63,9 @@ describe('power curve', () => {
 
 /** The demo as the GUI assigns it after "Load demo data". */
 function loadDemo() {
-  const { series, targets, powerCurve } = assignFiles(DEMO_FILES)
+  const { series, targets, curves } = assignFiles(DEMO_FILES)
   expect(targets).toEqual(['demo_target'])
-  return buildDataset(series.find((s) => s.id === 'demo_target')!, series.filter((s) => s.id !== 'demo_target'), powerCurve!)
+  return buildDataset(series.find((s) => s.id === 'demo_target')!, series.filter((s) => s.id !== 'demo_target'), curves[0].curve)
 }
 
 describe('demo data', () => {
@@ -112,7 +112,7 @@ describe('file assignment', () => {
     expect(a.series.map((s) => s.id)).toEqual(['ref', 'target'])
     expect(a.targetCandidates).toEqual(['target'])
     expect(a.targets).toEqual(['target'])
-    expect(a.powerCurve).toEqual({ windMs: [3, 12], powerKw: [0, 3000] })
+    expect(a.curves).toEqual([{ file: 'curve.csv', curve: { windMs: [3, 12], powerKw: [0, 3000] }, turbines: undefined }])
     expect(a.errors).toEqual([])
   })
 
@@ -123,7 +123,7 @@ describe('file assignment', () => {
     expect(a.series.map((s) => s.id)).toEqual(['WTG01', 'WTG02', 'ref'])
     expect(a.targetCandidates).toEqual(['WTG02', 'WTG01'])
     expect(a.targets).toEqual(['WTG02', 'WTG01'])
-    expect(a.powerCurve).toBeUndefined()
+    expect(a.curves).toEqual([])
   })
 
   it('leaves a series whose longest outage is at most half the longest as a reference', () => {
@@ -136,11 +136,30 @@ describe('file assignment', () => {
     expect(assignFiles([file('target', [1, 1]), file('ref', [1, 1, 1, 1, 1])]).targetCandidates).toEqual(['target'])
   })
 
-  it('reports unreadable files, clashing ids and several power curves without dropping the rest', () => {
+  it('reports unreadable files and clashing ids without dropping the rest, and keeps every power curve', () => {
     const a = assignFiles([file('a', [1, 1]), file('a.txt', [1, 1]), { name: 'bad.csv', text: 'x;y\nfoo;bar' }, curve, { ...curve, name: 'c2.csv' }])
     expect(a.series.map((s) => s.id)).toEqual(['a'])
-    expect(a.errors.map((e) => e.file)).toEqual(['a.txt', 'bad.csv', 'curve.csv, c2.csv'])
-    expect(a.powerCurve).toBeUndefined()
+    expect(a.errors.map((e) => e.file)).toEqual(['a.txt', 'bad.csv'])
+    expect(a.curves.map((c) => c.file)).toEqual(['curve.csv', 'c2.csv'])
+  })
+})
+
+describe('default power curve of a target', () => {
+  const up = (name: string) => ({ name, curve: { windMs: [3, 12], powerKw: [0, 3000] } })
+  const ids = ['T1_data', 'T2_data', 'O1_data', 'H1_data']
+
+  it('takes the uploaded curve of the same site', () => {
+    expect(defaultCurve('T2_data', [up('T1_power_curve.xlsx'), up('T2_power_curve.xlsx')], ids).name).toBe('T2_power_curve.xlsx')
+  })
+
+  it('takes the one uploaded curve that belongs to no series', () => {
+    expect(defaultCurve('target', [up('power_curve.csv')], ['target', 'reference']).name).toBe('power_curve.csv')
+  })
+
+  it('takes the type the team assigned to the site, else Nordex', () => {
+    expect(defaultCurve('T2_data', [up('T1_power_curve.xlsx')], ids).name).toBe('Nordex N149/4.0-4.5')
+    expect(defaultCurve('O1_data', [], ids).name).toBe('Enercon E-40/6.44')
+    expect(defaultCurve('H1_data', [], ids).name).toBe('Nordex N149/4.0-4.5')
   })
 })
 

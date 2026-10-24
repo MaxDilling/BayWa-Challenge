@@ -1,6 +1,6 @@
-import { Check, Copy, Download, FileText, Mail } from 'lucide-react'
+import { Check, Copy, Download, FileText, LoaderCircle, Mail, Share } from 'lucide-react'
 import { observer } from 'mobx-react-lite'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { AnalysisState } from '@/components/AnalysisState'
 import { fmtDateTime, fmtDuration, fmtNum, fmtPct, HOUR, isoBerlin, STEP_MS, toLocalInput } from '@/components/format'
 import { BAND_HINT, farmText, headline, referenceText, toolText, trainingDays } from '@/components/metrics'
@@ -10,7 +10,6 @@ import { Notice } from '@/components/Notice'
 import { FILLED_HEADER, filledTargetCsv, type Dataset, type Span, type Warning } from '@/data'
 import type { AnalyzeResponse } from '@/engine'
 import { store } from '@/state/store'
-import { Report } from '@/steps/Report'
 
 const COLUMNS = ['time_berlin', 'time_utc', 'wind_mean_ms', 'wind_q10_ms', 'wind_q90_ms', 'power_mean_kw', 'energy_kwh', 'cumulative_kwh']
 
@@ -33,9 +32,9 @@ function predictionRows({ prediction, energy }: AnalyzeResponse): string[][] {
   })
 }
 
-function download(name: string, text: string) {
+function download(name: string, data: string | Blob) {
   const a = document.createElement('a')
-  a.href = URL.createObjectURL(new Blob([text], { type: 'text/csv' }))
+  a.href = URL.createObjectURL(typeof data === 'string' ? new Blob([data], { type: 'text/csv' }) : data)
   a.download = name
   a.click()
   setTimeout(() => URL.revokeObjectURL(a.href))
@@ -60,7 +59,7 @@ function emailDraft(dataset: Dataset, outage: Span, model: string, response: Ana
       : 'Accuracy: there was not enough data before the outage for a backtest.',
     warnings.length > 0 &&
       `Data checks to note: ${warnings.map((w) => `${w.title}. ${w.detail}`).join(' ')}`,
-    'The prediction is attached as a CSV file with 10-minute values in Europe/Berlin and UTC time.',
+    'Attached are the report (PDF) with charts, method and accuracy, and the prediction as a CSV file with 10-minute values in Europe/Berlin and UTC time.',
     'Kind regards',
     `Calculated with ${toolText(response)}.`,
   ]
@@ -78,7 +77,7 @@ export const ExportStep = observer(function ExportStep() {
   const { subject, body } = emailDraft(dataset, outage, store.label(model), response, warnings)
   return (
     <div className="grid gap-section lg:grid-cols-2">
-      <ReportCard />
+      <ReportCard subject={subject} body={body} csv={new File([csv], file, { type: 'text/csv' })} />
       <FilledCard dataset={dataset} response={response} />
       <EmailCard subject={subject} body={body} />
       <Section
@@ -172,35 +171,86 @@ const DownloadAll = observer(function DownloadAll() {
   )
 })
 
-/** The insurer's PDF for every target with a result for the selected model; waits until no target is still being calculated. */
-const ReportCard = observer(function ReportCard() {
-  const [printed, setPrinted] = useState(0)
-  const { targets, datasets, outages, resultsByTarget, failuresByTarget, model } = store
+/** The insurer's PDF for every target with a result for the selected model. Made in the background once no target is still
+ * being calculated, so that download and share run within the click: browsers share only from a user gesture. */
+const ReportCard = observer(function ReportCard({ subject, body, csv }: { subject: string; body: string; csv: File }) {
+  const { targets, datasets, outages, resultsByTarget, failuresByTarget, model, stations, files, curveChoice } = store
   const pending = targets.filter((t) => datasets[t.id] && outages[t.id] && !resultsByTarget[t.id]?.[model] && failuresByTarget[t.id]?.[model] === undefined)
   const left = targets.filter((t) => !resultsByTarget[t.id]?.[model] && !pending.includes(t))
+  const [pdf, setPdf] = useState<{ file: File } | { error: string }>()
+  const [shareError, setShareError] = useState<string>()
+  useEffect(() => {
+    setPdf(undefined)
+    if (pending.length) return
+    let current = true
+    const created = Date.now()
+    const input = {
+      cases: targets.map(({ id }) => ({
+        id,
+        dataset: datasets[id],
+        outage: outages[id],
+        response: resultsByTarget[id]?.[model],
+        failure: failuresByTarget[id]?.[model],
+        curve: store.curveOf(id).name,
+      })),
+      method: store.label(model),
+      stations,
+      files: files.map((f) => f.name),
+      created,
+    }
+    const name = `windgap_report_${targets.map((t) => t.id).join('_')}_${toLocalInput(created).slice(0, 10)}.pdf`
+    import('@/report/pdf')
+      .then(({ reportPdf }) => new File([reportPdf(input)], name, { type: 'application/pdf' }))
+      .then(
+        (file) => current && setPdf({ file }),
+        (e: unknown) => current && setPdf({ error: e instanceof Error ? e.message : String(e) }),
+      )
+    return () => {
+      current = false
+    }
+  }, [targets, datasets, outages, resultsByTarget, failuresByTarget, model, stations, files, curveChoice, pending.length])
+  const file = pdf && 'file' in pdf ? pdf.file : undefined
+  const share = (file: File) => {
+    setShareError(undefined)
+    navigator.share({ title: subject, text: body, files: [file, csv] }).catch((e: Error) => e.name !== 'AbortError' && setShareError(e.message))
+  }
   return (
     <Section
       title="Report for the insurer"
       className="lg:col-span-2"
-      description="One PDF with lost energy and range, wind and energy charts, method, accuracy and data checks for every target. Choose “Save as PDF” in the print dialog."
+      description="One PDF with lost energy and range, wind and energy charts, method, accuracy and data checks for every target. Share hands it with the CSV and the email text to a mail app."
       action={
-        <Button disabled={pending.length > 0} onClick={() => setPrinted((n) => n + 1)}>
-          <FileText /> Download report (PDF)
-        </Button>
+        <div className="flex gap-2">
+          {file && navigator.canShare?.({ files: [file, csv] }) && (
+            <Button variant="outline" onClick={() => share(file)}>
+              <Share /> Share with attachments
+            </Button>
+          )}
+          <Button disabled={!file} onClick={() => download(file!.name, file!)}>
+            <FileText /> Download report (PDF)
+          </Button>
+        </div>
       }
     >
-      {pending.length > 0 ? (
-        <Notice tone="loading" title="Still calculating">
-          The report waits for {pending.map((t) => t.id).join(', ')}.
+      {pdf && 'error' in pdf ? (
+        <Notice tone="error" title="The report could not be made">
+          {pdf.error}
         </Notice>
       ) : (
-        <p className="text-label text-muted-foreground">
-          {targets.length > 1 ? `${targets.length - left.length} of ${targets.length} targets, a page or two each` : `Target ${targets[0].id}`} ·{' '}
-          {store.label(model)}
-          {left.length > 0 && ` · without a result, named in the report: ${left.map((t) => t.id).join(', ')}`}
+        <p className="flex items-center gap-2 text-label text-muted-foreground">
+          {!file && <LoaderCircle className="size-4 animate-spin text-primary" />}
+          {pending.length > 0
+            ? `Waiting for ${pending.map((t) => t.id).join(', ')} to be calculated`
+            : !file
+              ? 'Preparing the report'
+              : `${targets.length > 1 ? `${targets.length - left.length} of ${targets.length} targets, a page or two each` : `Target ${targets[0].id}`} · ${store.label(model)}${left.length > 0 ? ` · without a result, named in the report: ${left.map((t) => t.id).join(', ')}` : ''}`}
         </p>
       )}
-      {printed > 0 && <Report key={printed} />}
+      {shareError && (
+        <Notice tone="error" title="Sharing failed">
+          {shareError}
+        </Notice>
+      )}
     </Section>
   )
 })
@@ -216,7 +266,7 @@ function EmailCard({ subject, body }: { subject: string; body: string }) {
     <Section
       title="Email to the insurer"
       className="lg:row-span-2"
-      description="A draft with period, method, lost energy, accuracy and data checks. Attach the CSV."
+      description="A draft with period, method, lost energy, accuracy and data checks. Attach the PDF report and the CSV."
       action={
         <div className="flex gap-2">
           <Button variant="outline" asChild>

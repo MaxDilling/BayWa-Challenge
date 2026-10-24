@@ -4,8 +4,10 @@ import pandas as pd
 
 from harness.datasets import Pair
 from windgap.backtest import fold
+from windgap.core.io import CsvError
 from windgap.core.metrics import summarize
-from windgap.core.schema import STEP
+from windgap.core.outage import fill_during_outage
+from windgap.core.schema import STEP, Outage
 
 COLUMNS = ["wind_rmse", "wind_mae", "power_rmse", "power_mae", "energy_wape_pct", "energy_dev_pct", "energy_err_kwh",
            "bias", "coverage_80", "energy_coverage_80", "energy_band_pct", "score", "n"]
@@ -26,18 +28,20 @@ def scenarios(target: pd.Series, cfg: dict, holdout: bool) -> list[tuple[pd.Time
 
 
 def run(pairs: list[Pair], models: dict[str, tuple[str, dict]], cfg: dict, holdout: bool) -> tuple[pd.DataFrame, dict]:
-    """One row per model × scenario, and per dataset the number of scenarios skipped because a reference has
-    gaps in the window (predict needs complete references; the harness never fills them)."""
+    """One row per model × scenario, and per dataset the number of scenarios skipped because a reference has a gap
+    in the window that the import would not bridge either (fill_during_outage, as in the GUI and harness.predict)."""
     rows, skipped = [], {}
     for pair in pairs:
         skipped[pair.name] = 0
-        for t0, hours in scenarios(pair.target, cfg, holdout):
+        for t0, hours in scenarios(pair.target, cfg | pair.scenarios, holdout):
             end = t0 + pd.Timedelta(hours=hours)
-            if pair.refs[(pair.refs.index >= t0) & (pair.refs.index < end)].isna().any().any():
+            try:
+                refs = pd.concat([fill_during_outage(pair.refs[c], Outage(t0, end)) for c in pair.refs], axis=1)
+            except CsvError:
                 skipped[pair.name] += 1
                 continue
             for label, (model, params) in models.items():
-                _, metrics = fold(model, params, pair.target, pair.refs, pair.curve, t0, end)
+                _, metrics = fold(model, params, pair.target, refs, pair.curve, t0, end, pair.extra)
                 if metrics:
                     rows.append({"model": label, "dataset": pair.name, "length_h": hours, "t0": t0, **metrics})
     return pd.DataFrame(rows), skipped

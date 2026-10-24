@@ -19,8 +19,10 @@ SHORT = ["wind_rmse", "power_rmse", "energy_wape_pct", "energy_dev_pct", "bias",
 def main() -> None:
     ap = argparse.ArgumentParser(prog="python -m harness")
     ap.add_argument("--config", default="configs/eval.yaml")
-    ap.add_argument("--models", default="all", help="'all' or comma-separated registry names and variants")
-    ap.add_argument("--datasets", default="all", help="'all' or comma-separated names from the config, e.g. demo,dwd")
+    ap.add_argument("--models", default="all", help="'all' or comma-separated registry names and variants; variants "
+                    "marked on_demand only by name")
+    ap.add_argument("--datasets", default="all", help="'all' or comma-separated names from the config, e.g. demo,dwd; "
+                    "entries marked on_demand only by name")
     ap.add_argument("--holdout", action="store_true", help="score on the locked last days; only for final decisions")
     args = ap.parse_args()
     started = time.perf_counter()
@@ -28,12 +30,13 @@ def main() -> None:
 
     variants = {name: (name, {}) for name in registry.names()}
     variants |= {label: (v["model"], v.get("params", {})) for label, v in (cfg["variants"] or {}).items()}
-    labels = list(variants) if args.models == "all" else args.models.split(",")
+    on_demand = {label for label, v in (cfg["variants"] or {}).items() if v.get("on_demand")}
+    labels = [v for v in variants if v not in on_demand] if args.models == "all" else args.models.split(",")
     models = {label: variants[label] for label in dict.fromkeys([cfg["baseline"], *labels])}
 
     pairs = []
     for spec in cfg["datasets"]:
-        if args.datasets == "all" or spec["name"] in args.datasets.split(","):
+        if (args.datasets == "all" and not spec.get("on_demand")) or spec["name"] in args.datasets.split(","):
             loaded = load(spec)
             pairs += loaded
             if not loaded:

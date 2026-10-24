@@ -3,10 +3,12 @@ import type { ModelInfo } from '../../contract'
 import type { WindModel } from './base'
 import { Identity } from './identity'
 import { LinearRegression, VarianceRatio } from './linear'
+import { MultiRegression } from './multi'
 
 type Params = Record<string, number | string>
 
 const lagMax = (p: Params) => (p.lag_max_min === undefined ? undefined : Number(p.lag_max_min))
+const sectors = (p: Params) => (p.direction_sectors === undefined ? undefined : Number(p.direction_sectors))
 
 const MODELS: Record<string, { label: string; tagline: string; create: (p: Params) => WindModel }> = {
   identity: {
@@ -18,6 +20,11 @@ const MODELS: Record<string, { label: string; tagline: string; create: (p: Param
     label: 'Linear regression (MCP)',
     tagline: 'Least-squares line through the reference wind, shifted by the delay between the farms.',
     create: (p) => new LinearRegression(lagMax(p)),
+  },
+  multi_regression: {
+    label: 'Multiple regression (MCP)',
+    tagline: 'Least-squares weights over all reference farms, each shifted by its own delay.',
+    create: (p) => new MultiRegression(lagMax(p), sectors(p)),
   },
   variance_ratio: {
     label: 'Variance ratio (MCP)',

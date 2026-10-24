@@ -57,12 +57,13 @@ class WindModel(Protocol):
 
 
 def calibrate(x: np.ndarray, y: np.ndarray, fit: Fit) -> Errors:
-    """Leave-one-block-out on the training grid (NaN = missing): the measured pairs are cut into N_BLOCKS contiguous
-    blocks of equal count (not equal time, or a long gap leaves blocks empty), and each block is predicted by `fit`
-    on the other blocks, so σ and the memory describe errors on unseen data, not the fit quality.
+    """Leave-one-block-out on the training grid (NaN = missing; x is 1-D, or one column per input): the measured rows
+    are cut into N_BLOCKS contiguous blocks of equal count (not equal time, or a long gap leaves blocks empty), and
+    each block is predicted by `fit` on the other blocks, so σ and the memory describe errors on unseen data, not the
+    fit quality.
     The mean absolute error is a line in the prediction (least squares, both coefficients ≥ 0), scaled so that
     80 % of the errors lie within ±Z90 · σ_t."""
-    ok = ~np.isnan(x) & ~np.isnan(y)
+    ok = ~np.isnan(x.reshape(len(y), -1)).any(axis=1) & ~np.isnan(y)
     pred = np.full(len(y), np.nan)
     for block in np.array_split(np.flatnonzero(ok), N_BLOCKS):
         train = ok.copy()
@@ -117,12 +118,16 @@ def pick_reference(refs: pd.DataFrame, y: np.ndarray, lag_max: int) -> tuple[int
     (Bonus 3: the tool picks the reference itself): (column, τ, r, best r of every column)."""
     best, rs = (0, 0, -np.inf), []
     for col in range(refs.shape[1]):
-        x = refs.iloc[:, col].to_numpy(dtype=float)
-        r, lag = max((correlation(*lagged_pairs(x, y, lag)), lag) for lag in range(-lag_max, lag_max + 1))
+        r, lag = best_lag(refs.iloc[:, col].to_numpy(dtype=float), y, lag_max)
         rs.append(r)
         if r > best[2]:
             best = (col, lag, r)
     return *best, rs
+
+
+def best_lag(x: np.ndarray, y: np.ndarray, lag_max: int) -> tuple[float, int]:
+    """(r, τ) at the delay |τ| ≤ lag_max steps where x(t − τ) correlates best with y(t)."""
+    return max((correlation(*lagged_pairs(x, y, lag)), lag) for lag in range(-lag_max, lag_max + 1))
 
 
 def choice_diagnostics(col: int, rs: list[float]) -> dict[str, float]:
@@ -137,6 +142,10 @@ def lagged_pairs(x: np.ndarray, y: np.ndarray, lag: int) -> tuple[np.ndarray, np
 
 
 def correlation(x: np.ndarray, y: np.ndarray) -> float:
-    """Pearson r over the steps where both are measured."""
+    """Pearson r over the steps where both are measured (the lag search calls it thousands of times per harness run,
+    np.corrcoef is several times slower)."""
     ok = ~np.isnan(x) & ~np.isnan(y)
-    return float(np.corrcoef(x[ok], y[ok])[0, 1]) if ok.sum() > 1 else float("nan")
+    if ok.sum() < 2:
+        return float("nan")
+    xc, yc = x[ok] - x[ok].mean(), y[ok] - y[ok].mean()
+    return float(xc @ yc / np.sqrt((xc @ xc) * (yc @ yc)))

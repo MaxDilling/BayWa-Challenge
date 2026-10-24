@@ -12,14 +12,17 @@ MIN_TRAIN_STEPS = 144  # one day
 CONTEXT_STEPS = 36  # 6 h of reference on either side of the window
 
 
-def predict_window(model: WindModel, refs: pd.DataFrame, start: pd.Timestamp, end: pd.Timestamp) -> pd.DataFrame:
+def predict_window(model: WindModel, refs: pd.DataFrame, start: pd.Timestamp, end: pd.Timestamp,
+                   extra: pd.DataFrame | None = None) -> pd.DataFrame:
     """Prediction for [start, end), made from the window plus the complete reference rows right before and after it
-    (up to CONTEXT_STEPS each), so a model that shifts the reference by τ uses measured values, not the window's edge."""
+    (up to CONTEXT_STEPS each), so a model that shifts the reference by τ uses measured values, not the window's edge.
+    `extra` (S3) goes along with the same rows."""
     i, j = refs.index.searchsorted([start, end])
     complete = refs.notna().all(axis=1).to_numpy()
     before = _leading(complete[max(0, i - CONTEXT_STEPS):i][::-1])
     after = _leading(complete[j:j + CONTEXT_STEPS])
-    return model.predict(refs.iloc[i - before:j + after]).iloc[before:before + j - i]
+    rows = slice(i - before, j + after)
+    return model.predict(refs.iloc[rows], None if extra is None else extra.iloc[rows]).iloc[before:before + j - i]
 
 
 def _leading(mask: np.ndarray) -> int:
@@ -28,17 +31,18 @@ def _leading(mask: np.ndarray) -> int:
 
 
 def fold(model: str, params: dict, target: pd.Series, refs: pd.DataFrame, curve: PowerCurve,
-         start: pd.Timestamp, end: pd.Timestamp) -> tuple[pd.DataFrame, dict[str, float]]:
+         start: pd.Timestamp, end: pd.Timestamp, extra: pd.DataFrame | None = None
+         ) -> tuple[pd.DataFrame, dict[str, float]]:
     """Fit on everything before `start`, predict [start, end), score against the hidden target."""
     before = target.index < start
     window = (target.index >= start) & (target.index < end)
-    fitted = registry.create(model, **params).fit(target[before], refs[before])
-    pred = predict_window(fitted, refs, start, end)
+    fitted = registry.create(model, **params).fit(target[before], refs[before], None if extra is None else extra[before])
+    pred = predict_window(fitted, refs, start, end, extra)
     return pred, evaluate(target[window], pred, curve, fitted.errors.acf)
 
 
 def backtest(model: str, params: dict, target: pd.Series, refs: pd.DataFrame, curve: PowerCurve,
-             length: int, n_folds: int = 5) -> dict[str, float]:
+             length: int, extra: pd.DataFrame | None = None, n_folds: int = 5) -> dict[str, float]:
     """Summarized metrics over up to `n_folds` outages of `length` steps, tiled backwards from the end of `target`."""
     results = []
     for i in range(1, n_folds + 1):
@@ -46,7 +50,7 @@ def backtest(model: str, params: dict, target: pd.Series, refs: pd.DataFrame, cu
         if start_pos < MIN_TRAIN_STEPS:
             break
         start = target.index[start_pos]
-        _, metrics = fold(model, params, target, refs, curve, start, start + length * STEP)
+        _, metrics = fold(model, params, target, refs, curve, start, start + length * STEP, extra)
         if metrics:
             results.append(metrics)
     if not results:

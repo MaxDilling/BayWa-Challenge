@@ -2,7 +2,7 @@ import { CircleAlert, FileUp } from 'lucide-react'
 import { useRef, useState, type ReactNode } from 'react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Section } from '@/components/Section'
-import { ImportError } from '@/data'
+import { ImportError, readFiles } from '@/data'
 import { cn } from '@/lib/utils'
 
 interface Props<T> {
@@ -15,7 +15,7 @@ interface Props<T> {
   children?: ReactNode
 }
 
-/** Drop or browse CSV files; import errors are shown here, at the zone they belong to. */
+/** Drop or browse CSV or Excel files; import errors are shown here, at the zone they belong to. */
 export function DropZone<T>({ title, hint, multiple, read, onRead, action, children }: Props<T>) {
   const [error, setError] = useState<{ file: string; message: string }>()
 
@@ -23,7 +23,7 @@ export function DropZone<T>({ title, hint, multiple, read, onRead, action, child
     const values: T[] = []
     for (const file of multiple ? files : files.slice(0, 1)) {
       try {
-        values.push(read(file.name.replace(/\.[^.]+$/, ''), await file.text()))
+        for (const { name, text } of await readFiles([file])) values.push(read(name.replace(/\.[^.]+$/, ''), text))
       } catch (e) {
         if (!(e instanceof ImportError)) throw e
         return setError({ file: file.name, message: e.message })
@@ -36,7 +36,7 @@ export function DropZone<T>({ title, hint, multiple, read, onRead, action, child
   return (
     <Section title={title} description={hint} action={action}>
       <FileDrop multiple={multiple} onFiles={load}>
-        Drop CSV {multiple ? 'files' : 'file'} here or <span className="font-medium text-primary">browse</span>
+        Drop CSV or Excel {multiple ? 'files' : 'file'} here or <span className="font-medium text-primary">browse</span>
       </FileDrop>
       {error && <FileError {...error} />}
       {children}
@@ -85,7 +85,7 @@ export function FileDrop({ multiple, onFiles, className, children }: { multiple?
       <input
         ref={input}
         type="file"
-        accept=".csv,.txt,text/csv"
+        accept=".csv,.txt,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         multiple={multiple}
         hidden
         onChange={(e) => {

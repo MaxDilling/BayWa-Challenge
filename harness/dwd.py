@@ -1,11 +1,16 @@
 """Real station pairs for the harness: 10-minute mean wind (FF_10, about 10 m above ground, not hub height) of
 nearby DWD stations in flat northern Germany, cut to the same window and written in the challenge format to
 data/dwd/<pair>/ with the generic power curve. Source: Deutscher Wetterdienst, opendata.dwd.de (CC BY 4.0).
-Run: make dwd"""
+Run: make dwd
+
+`refs` (make dwd-refs) writes the reference stations around the challenge farms with wind speed and direction over
+the challenge period to data/dwd_refs/, checked in, because the app runs offline and the DWD server allows no browser
+access (SPEC.md, "Externe Daten")."""
 
 import io
 import math
 import shutil
+import sys
 import urllib.request
 import zipfile
 from pathlib import Path
@@ -18,6 +23,7 @@ from windgap.core.schema import STEP
 
 URL = "https://opendata.dwd.de/climate_environment/CDC/observations_germany/climate/10_minutes/wind/recent/"
 OUT = Path(__file__).resolve().parent.parent / "data" / "dwd"
+REFS = OUT.with_name("dwd_refs")
 START, DAYS = pd.Timestamp("2026-09-15", tz="Europe/Berlin"), 30
 # (folder, target station id, reference station id), 29–41 km apart
 PAIRS = [
@@ -27,6 +33,10 @@ PAIRS = [
     ("schleswig-flensburg", "04466", "01379"),
     ("doerpen-friesoythe", "06159", "01503"),
 ]
+# Stations around the challenge farms (knowledge/turbinen.md), complete during the hidden test 1–3 Sep 2026
+REF_STATIONS = {"00701": "Bremerhaven", "00891": "Cuxhaven", "00691": "Bremen", "06091": "Spiekeroog",
+                "01975": "Hamburg", "04745": "Soltau", "02014": "Hannover", "01993": "Hameln"}
+REF_START, REF_DAYS = pd.Timestamp("2026-06-30", tz="UTC"), 93
 
 
 def stations() -> pd.DataFrame:
@@ -37,16 +47,35 @@ def stations() -> pd.DataFrame:
     return df.astype({"lat": float, "lon": float})
 
 
-def wind(station: str) -> pd.Series:
-    """FF_10 in m/s on the UTC 10-minute grid of the window (DWD stamps 10-minute data in UTC); -999 becomes NaN."""
+def observations(station: str, start: pd.Timestamp, days: int) -> pd.DataFrame:
+    """FF_10 (m/s) and DD_10 (degrees) on the UTC 10-minute grid of the window (DWD stamps 10-minute data in UTC);
+    -999 becomes NaN."""
     raw = urllib.request.urlopen(f"{URL}10minutenwerte_wind_{station}_akt.zip").read()
     with zipfile.ZipFile(io.BytesIO(raw)) as z:
         name = next(n for n in z.namelist() if n.startswith("produkt"))
         df = pd.read_csv(z.open(name), sep=";", skipinitialspace=True, na_values=[-999])
     index = pd.to_datetime(df["MESS_DATUM"].astype(str), format="%Y%m%d%H%M").dt.tz_localize("UTC")
-    start = START.tz_convert("UTC")
-    grid = pd.date_range(start, start + pd.Timedelta(days=DAYS), freq=STEP, inclusive="left")
-    return pd.Series(df["FF_10"].to_numpy(), index=index).reindex(grid)
+    start = start.tz_convert("UTC")
+    grid = pd.date_range(start, start + pd.Timedelta(days=days), freq=STEP, inclusive="left")
+    return df[["FF_10", "DD_10"]].set_axis(index).reindex(grid)
+
+
+def wind(station: str) -> pd.Series:
+    return observations(station, START, DAYS)["FF_10"]
+
+
+def refs() -> None:
+    shutil.rmtree(REFS, ignore_errors=True)
+    REFS.mkdir(parents=True)
+    for station, name in REF_STATIONS.items():
+        obs = observations(station, REF_START, REF_DAYS)
+        path = REFS / f"DWD_{name}.csv"
+        with path.open("w") as f:
+            f.write(f"# Deutscher Wetterdienst (DWD) station {station} {name}: 10-minute mean wind FF_10 (m/s) and "
+                    f"direction DD_10 (degrees) at about 10 m height. Licence CC BY 4.0.\n")
+            obs.to_csv(f, header=["wind_speed", "wind_direction"], index_label="Timestamp (UTC)",
+                       date_format="%Y-%m-%d %H:%M", na_rep="", float_format="%g", lineterminator="\n")
+        print(f"{path.name}: missing {int(obs['FF_10'].isna().sum())} of {len(obs)} wind values")
 
 
 def distance_km(a: pd.Series, b: pd.Series) -> float:
@@ -70,4 +99,4 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    refs() if sys.argv[1:] == ["refs"] else main()

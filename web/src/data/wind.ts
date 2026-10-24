@@ -13,10 +13,14 @@ export interface WindSeries {
     negative: number
     ignoredColumns: string[]
   }
+  /** Wind direction in degrees on the same grid, when the file has one wind and one direction column. */
+  direction?: Grid
 }
 
 const WIND = /wind|speed|geschw|m\/s|\bws\b/i
 const NOT_WIND = /dir|richt|deg|°|temp|press|druck|hpa|mbar|humid|feucht|precip|nieder|power|leistung|rpm|status|flag|qual|gust|böe|max|std|sigma/i
+const DIRECTION = /dir|richt/i
+const NOT_DIRECTION = /std|sigma/i
 const UTC_HEADER = /\b(utc|gmt)\b(?!\s*[+-])/i
 const TIME_ONLY = /^\d{1,2}:\d{2}(:\d{2})?$/
 
@@ -61,7 +65,10 @@ export function windSeries(name: string, { header, rows }: Table): WindSeries[] 
 
   const t0 = utc[0]
   const n = (utc[utc.length - 1] - t0) / STEP_MS + 1
-  const ignoredColumns = header ? others.filter((i) => !windCols.includes(i)).map((i) => header[i]) : []
+  const directions = others.filter((i) => header && DIRECTION.test(header[i]) && !NOT_DIRECTION.test(header[i]))
+  const directionCol = windCols.length === 1 && directions.length === 1 ? directions[0] : undefined
+  const ignoredColumns = header ? others.filter((i) => !windCols.includes(i) && i !== directionCol).map((i) => header[i]) : []
+  const direction = directionCol === undefined ? undefined : directionGrid(rows, directionCol, utc, t0, n)
   return windCols.map((col) => {
     const values: (number | null)[] = Array(n).fill(null)
     let negative = 0
@@ -76,6 +83,18 @@ export function windSeries(name: string, { header, rows }: Table): WindSeries[] 
       id: windCols.length === 1 ? name : header?.[col] || `${name} column ${col + 1}`,
       grid: { t0, stepS: 600, values },
       report: { rows: rows.length, measured, missing: n - measured, negative, ignoredColumns },
+      ...(direction && { direction }),
     }
   })
+}
+
+/** Degrees on the grid; values outside 0–360 are missing, other text is an error. */
+function directionGrid(rows: Table['rows'], col: number, utc: number[], t0: number, n: number): Grid {
+  const values: (number | null)[] = Array(n).fill(null)
+  rows.forEach(({ line, cells }, i) => {
+    const v = parseNumber(cells[col])
+    if (v === undefined) throw new ImportError(`Line ${line}: "${cells[col]}" is not a wind direction.`)
+    values[(utc[i] - t0) / STEP_MS] = v !== null && v >= 0 && v <= 360 ? v : null
+  })
+  return { t0, stepS: 600, values }
 }

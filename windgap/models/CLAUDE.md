@@ -19,4 +19,4 @@ Kontrakt S3 und Modellleiter M0–M7 stehen in `SPEC.md`. Hier steht nur, was be
 - σ kommt aus `calibrate` (Fehler auf ungesehenen Blöcken), nie aus der Anpassungsgüte. Ziel: `coverage_80` ≈ 0,8.
 - Schnell bleiben: `fit` läuft in der Harness tausendfach; numpy statt pandas in Schleifen (Harness < 30 s).
 - Nur numpy und pandas. scipy, statsmodels oder scikit-learn nur nach Rückfrage (Kaltstart in Pyodide). LightGBM und alles, was nur als Benchmark dient, gehört nach `harness/benchmarks/`, nie hierher.
-- Mehrere Referenzen: `fit` wählt die Spalte mit `pick_reference` (base.py) und meldet die Wahl mit `choice_diagnostics`; `predict` liest nur diese Spalte.
+- Mehrere Referenzen: Ein Modell mit einer Referenz wählt die Spalte mit `pick_reference` (base.py), meldet die Wahl mit `choice_diagnostics` und liest in `predict` nur diese Spalte. Ein Modell, das mehrere kombiniert (`multi_regression`), meldet kein `reference_index`, weil die GUI sonst „the others are not used“ schreibt; Gewichte stehen in `params` (`b_ref_<i>`), Versätze in `diagnostics` (`lag_min_ref_<i>`), `calibrate` bekommt eine Spalte je Eingang.

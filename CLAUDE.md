@@ -20,7 +20,7 @@ make demo        # data/synthetic/demo_*.csv neu schreiben (Demo-Daten der GUI)
 make harness     # Leaderboard aller Modelle über alle Datensätze aus configs/eval.yaml → runs/ (on_demand-Einträge nur per --datasets/--models)
 make dwd         # data/dwd/<paar>/ von opendata.dwd.de laden (echte Stationspaare, nicht eingecheckt)
 make dwd-refs    # data/dwd_refs/: acht DWD-Stationen Jul–Sep 2026 als Zusatzreferenzen für App und Harness (eingecheckt)
-make csv         # jede .xlsx in data/data_hackathon_baywa_re/ (oder XLSX=<ordner>) als .csv daneben
+make csv         # jede .xlsx in data/data_hackathon_baywa_re/ (oder XLSX=<ordner>) als .csv in <ordner>/csv/
 make predict TURBINES=4   # Abgabe-CSV aus data/challenge/ (target.csv, reference.csv, power_curve.csv) → predictions.csv
 make dev         # Wheel bauen, Pyodide holen, Vite-Dev-Server
 make build       # dist/windgap.html (Einzeldatei, ts) + dist/windgap-web/ (beide Engines)
@@ -88,7 +88,7 @@ harness (nativ) ──▶ windgap.backtest.fold ──▶ windgap.models.registr
 - **`knowledge/`**: Recherchen und Fakten außerhalb von Spezifikation und Code (Herkunft der Daten, Turbinentypen), je Thema eine Datei mit Quelle und Sicherheit; Index in `knowledge/README.md`.
 - **`data/dwd_refs/`**: eingecheckt (CC BY 4.0), acht DWD-Stationen um die Challenge-Parks, Wind und Richtung Jul–Sep 2026, von `make dwd-refs`.
 - **`data/power_curves/`**: eingecheckt, Leistungskurven je Turbine mit Quelle im Vorspann: V47, E-40/6.44 und Nordex N149/4.0-4.5 (5-MW-Tabelle auf 4,5 MW gekappt) (in der GUI wählbar), AN Bonus 1000/54 (Typ in Sievern, das wir zuerst für T hielten; T ist Wilhelmshöhe in Uetze mit N149/4.0-4.5, `knowledge/turbinen.md`).
-- **`data/data_hackathon_baywa_re/`**: die Challenge-Daten der Organisatoren (xlsx, Turbinen T1–T3 als Ziele, H1–H5 und O1–O2 als Referenzen), nicht eingecheckt; `make csv` legt CSVs daneben. Aufbau und was die Anwendung dafür noch braucht: SPEC.md, „Challenge-Daten“.
+- **`data/data_hackathon_baywa_re/`**: die Challenge-Daten der Organisatoren (xlsx, Turbinen T1–T3 als Ziele, H1–H5 und O1–O2 als Referenzen), nicht eingecheckt; `make csv` legt die CSVs in den Unterordner `csv/`. Aufbau und was die Anwendung dafür noch braucht: SPEC.md, „Challenge-Daten“.
 - **`data/challenge/`** ist nicht eingecheckt, solange nicht geklärt ist, ob die Challenge-Daten öffentlich sein dürfen. `data/dwd/` ist nicht eingecheckt; `make dwd` lädt es reproduzierbar.
 
 ## Arbeiten im Team

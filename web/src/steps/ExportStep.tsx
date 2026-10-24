@@ -2,8 +2,8 @@ import { Check, Copy, Download, FileText, LoaderCircle, Mail, Share } from 'luci
 import { observer } from 'mobx-react-lite'
 import { useEffect, useState } from 'react'
 import { AnalysisState } from '@/components/AnalysisState'
-import { fmtDateTime, fmtDuration, fmtNum, fmtPct, HOUR, isoBerlin, STEP_MS, toLocalInput } from '@/components/format'
-import { BAND_HINT, densityText, farmText, headline, referenceText, toolText, trainingDays } from '@/components/metrics'
+import { fmtAmount, fmtDateTime, fmtDuration, fmtNum, fmtPct, HOUR, isoBerlin, STEP_MS, toLocalInput } from '@/components/format'
+import { BAND_HINT, densityText, farmText, referenceText, toolText, trainingDays } from '@/components/metrics'
 import { Section } from '@/components/Section'
 import { Button } from '@/components/ui/button'
 import { Notice } from '@/components/Notice'
@@ -43,25 +43,41 @@ function download(name: string, data: string | Blob) {
 function emailDraft(dataset: Dataset, outage: Span, model: string, response: AnalyzeResponse, warnings: Warning[]) {
   const v = response.validation
   const target = dataset.target.id
+  const { kwhP10, kwhP50, kwhP90 } = response.energy
   const accuracy = [
-    v.energy_wape_pct !== undefined && `the lost-energy estimate was off by ${fmtNum(v.energy_wape_pct, 1)} % of the measured energy overall`,
-    v.wind_rmse !== undefined && `the wind speed error (RMSE) was ${fmtNum(v.wind_rmse, 2)} m/s`,
-    v.coverage_80 !== undefined && `${fmtPct(v.coverage_80, 0)} of the measured values fell inside the 80 % band`,
+    v.energy_wape_pct !== undefined && `• Lost-energy error: ${fmtNum(v.energy_wape_pct, 1)} % of the measured energy`,
+    v.wind_rmse !== undefined && `• Wind speed error (RMSE): ${fmtNum(v.wind_rmse, 2)} m/s`,
+    v.coverage_80 !== undefined && `• Measured values inside the 80 % band: ${fmtPct(v.coverage_80, 0)}`,
   ].filter(Boolean)
-  const subject = `Energy loss estimate for wind farm ${target}, outage from ${fmtDateTime(outage.startMs)}`
+  const subject = `Energy loss estimate – wind farm ${target} – outage of ${fmtDateTime(outage.startMs)}`
   const body = [
-    'Dear Sir or Madam,',
-    `we report an outage of wind farm ${target} (${farmText(dataset)}) from ${fmtDateTime(outage.startMs)} to ${fmtDateTime(outage.endMs)} (Europe/Berlin), ${fmtDuration(outage.endMs - outage.startMs)} in total.`,
-    `Estimated lost energy: ${headline(response.energy).replace('Most', 'most')} The range is the 10 % to 90 % quantile (P10 to P90). ${BAND_HINT} ${densityText(response.energy)}`,
-    `Method: the missing 10-minute wind speeds were predicted from ${referenceText(dataset.references, response.explanation)}, using the relationship learned from the ${fmtNum(trainingDays(dataset, outage))} days of target data outside the outage (${model}). The predicted wind was converted to energy with the turbine power curve, taking the uncertainty of each prediction into account.`,
-    v.n_folds && accuracy.length
-      ? `Accuracy: in ${fmtNum(v.n_folds)} simulated outages of the same length before the event, ${accuracy.join(', ')}.`
-      : 'Accuracy: there was not enough data before the outage for a backtest.',
-    warnings.length > 0 &&
-      `Data checks to note: ${warnings.map((w) => `${w.title}. ${w.detail}`).join(' ')}`,
-    'Attached are the report (PDF) with charts, method and accuracy, and the prediction as a CSV file with 10-minute values in Europe/Berlin and UTC time.',
+    'Dear Sir/Madam,',
+    `Please find below our estimate of the energy lost during the outage of wind farm ${target}. Attached are the report (PDF) with charts, method and accuracy, and the prediction as a CSV file with 10-minute values in Europe/Berlin and UTC time.`,
+    [
+      'Outage',
+      `• Wind farm: ${target} (${farmText(dataset)})`,
+      `• Period: ${fmtDateTime(outage.startMs)} – ${fmtDateTime(outage.endMs)} (Europe/Berlin)`,
+      `• Duration: ${fmtDuration(outage.endMs - outage.startMs)}`,
+    ].join('\n'),
+    [
+      'Lost energy',
+      `• Best estimate (P50): ${fmtAmount(kwhP50)} kWh`,
+      `• 80 % range (P10 – P90): ${fmtAmount(kwhP10)} – ${fmtAmount(kwhP90)} kWh`,
+      densityText(response.energy),
+    ].join('\n'),
+    [
+      'Method',
+      `The missing 10-minute wind speeds were predicted from ${referenceText(dataset.references, response.explanation)}. The relationship between the farms was learned from the ${fmtNum(trainingDays(dataset, outage))} days of target data outside the outage (${model}). Each prediction, including its uncertainty, was converted to energy with the turbine power curve. ${BAND_HINT}`,
+    ].join('\n'),
+    [
+      'Validation',
+      ...(v.n_folds && accuracy.length
+        ? [`Backtest on ${fmtNum(v.n_folds)} simulated outages of the same length before the event:`, ...accuracy]
+        : ['There was not enough data before the outage for a backtest.']),
+    ].join('\n'),
+    warnings.length > 0 && ['Data notes', ...warnings.map((w) => `• ${w.title}. ${w.detail}`)].join('\n'),
     'Kind regards',
-    `Calculated with ${toolText(response)}.`,
+    `—\nCalculated with ${toolText(response)}`,
   ]
     .filter(Boolean)
     .join('\n\n')

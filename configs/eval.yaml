@@ -30,31 +30,31 @@ datasets:
   - {name: challenge, kind: folder, path: data/challenge, n_turbines: 1}
   # The organizers' data after `make csv`: each target turbine with the references outside its park (H, O). 90 days
   # and seven references per target: a wider t₀ step keeps the whole run under 30 s.
-  - {name: T1, kind: folder, path: data/data_hackathon_baywa_re, files: [T1_*.csv, "[HO]*.csv"], target: T1_data,
+  - {name: T1, kind: folder, path: data/data_hackathon_baywa_re/csv, files: [T1_*.csv, "[HO]*.csv"], target: T1_data,
      scenarios: {t0_step_h: 144}}
-  - {name: T2, kind: folder, path: data/data_hackathon_baywa_re, files: [T2_*.csv, "[HO]*.csv"], target: T2_data,
+  - {name: T2, kind: folder, path: data/data_hackathon_baywa_re/csv, files: [T2_*.csv, "[HO]*.csv"], target: T2_data,
      scenarios: {t0_step_h: 144}}
-  - {name: T3, kind: folder, path: data/data_hackathon_baywa_re, files: [T3_*.csv, "[HO]*.csv"], target: T3_data,
+  - {name: T3, kind: folder, path: data/data_hackathon_baywa_re/csv, files: [T3_*.csv, "[HO]*.csv"], target: T3_data,
      scenarios: {t0_step_h: 144}}
   # The same targets with the eight DWD stations of data/dwd_refs/ as extra references (make dwd-refs). on_demand: only
   # when named in --datasets, so `make harness` stays under 30 s.
-  - {name: T1+dwd, kind: folder, path: data/data_hackathon_baywa_re, files: [T1_*.csv, "[HO]*.csv"], target: T1_data,
+  - {name: T1+dwd, kind: folder, path: data/data_hackathon_baywa_re/csv, files: [T1_*.csv, "[HO]*.csv"], target: T1_data,
      extra_refs: [data/dwd_refs/*.csv], on_demand: true,
      scenarios: {t0_step_h: 144}}
-  - {name: T2+dwd, kind: folder, path: data/data_hackathon_baywa_re, files: [T2_*.csv, "[HO]*.csv"], target: T2_data,
+  - {name: T2+dwd, kind: folder, path: data/data_hackathon_baywa_re/csv, files: [T2_*.csv, "[HO]*.csv"], target: T2_data,
      extra_refs: [data/dwd_refs/*.csv], on_demand: true,
      scenarios: {t0_step_h: 144}}
-  - {name: T3+dwd, kind: folder, path: data/data_hackathon_baywa_re, files: [T3_*.csv, "[HO]*.csv"], target: T3_data,
+  - {name: T3+dwd, kind: folder, path: data/data_hackathon_baywa_re/csv, files: [T3_*.csv, "[HO]*.csv"], target: T3_data,
      extra_refs: [data/dwd_refs/*.csv], on_demand: true,
      scenarios: {t0_step_h: 144}}
 
   # The whole history as one complete outage: 72-h windows side by side, each predicted from the target data on both
   # sides of it, so every value before the holdout is reconstructed once.
-  - {name: T1/tiled, kind: folder, path: data/data_hackathon_baywa_re, files: [T1_*.csv, "[HO]*.csv"], target: T1_data,
+  - {name: T1/tiled, kind: folder, path: data/data_hackathon_baywa_re/csv, files: [T1_*.csv, "[HO]*.csv"], target: T1_data,
      on_demand: true, scenarios: {lengths_h: [72], t0_step_h: 72}}
-  - {name: T2/tiled, kind: folder, path: data/data_hackathon_baywa_re, files: [T2_*.csv, "[HO]*.csv"], target: T2_data,
+  - {name: T2/tiled, kind: folder, path: data/data_hackathon_baywa_re/csv, files: [T2_*.csv, "[HO]*.csv"], target: T2_data,
      on_demand: true, scenarios: {lengths_h: [72], t0_step_h: 72}}
-  - {name: T3/tiled, kind: folder, path: data/data_hackathon_baywa_re, files: [T3_*.csv, "[HO]*.csv"], target: T3_data,
+  - {name: T3/tiled, kind: folder, path: data/data_hackathon_baywa_re/csv, files: [T3_*.csv, "[HO]*.csv"], target: T3_data,
      on_demand: true, scenarios: {lengths_h: [72], t0_step_h: 72}}
 
 # Extra leaderboard rows: a registered model with fixed params. Without the delay τ (M1 instead of M3), to show

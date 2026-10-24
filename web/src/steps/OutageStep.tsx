@@ -5,7 +5,7 @@ import { useCallback, useState, type ReactNode } from 'react'
 import { AnalysisState } from '@/components/AnalysisState'
 import { Chart, type ChartTheme } from '@/components/charts/Chart'
 import { byId, gridPoints, tooltipHtml } from '@/components/charts/series'
-import { fmtDayTime, fmtDuration, fmtNum, fromLocalInput, STEP_MS, toLocalInput } from '@/components/format'
+import { axisTimes, fmtDayTime, fmtDuration, fmtNum, fromLocalInput, STEP_MS, toLocalInput } from '@/components/format'
 import { Notice } from '@/components/Notice'
 import { Section } from '@/components/Section'
 import { Warnings } from '@/components/Warnings'
@@ -25,7 +25,7 @@ export const OutageStep = observer(function OutageStep() {
     <div className="flex flex-col gap-section">
       <Section
         title="Detected outages"
-        description="Runs of at least 30 min without target data while a reference farm was measuring. The longest one is preselected."
+        description="Runs of at least 30 min without target data while a reference farm was measuring."
       >
         {dataset.outages.length ? (
           <div className="flex flex-wrap gap-2">
@@ -40,7 +40,7 @@ export const OutageStep = observer(function OutageStep() {
                   same(o, outage) && 'border-primary bg-accent text-accent-foreground',
                 )}
               >
-                <span className="font-medium tabular-nums">{fmtDuration(o.endMs - o.startMs)}</span>
+                <span className="font-medium tabular-nums">Duration: {fmtDuration(o.endMs - o.startMs)}</span>
                 <span className="text-label text-muted-foreground">
                   {fmtDayTime(o.startMs)} – {fmtDayTime(o.endMs)}
                 </span>
@@ -49,7 +49,6 @@ export const OutageStep = observer(function OutageStep() {
             {outage && !dataset.outages.some((o) => same(o, outage)) && (
               <span className="flex flex-col justify-center rounded-lg border border-primary bg-accent px-3 py-2 text-accent-foreground">
                 <span className="font-medium">Custom period</span>
-                <span className="text-label">set on the timeline</span>
               </span>
             )}
           </div>
@@ -63,7 +62,7 @@ export const OutageStep = observer(function OutageStep() {
         title="Timeline"
         description={
           <span className="flex flex-wrap items-center gap-x-4 gap-y-1">
-            <span>Drag across the chart to set the outage, drag its edges to fine-tune; zoom with the slider.</span>
+            <span>Click a detected outage or drag across the chart to set the outage, drag its edges to fine-tune; zoom with the slider.</span>
             <Swatch className="bg-outage-edge/40">Selected outage</Swatch>
             <Swatch className="bg-outage">Other detected outages</Swatch>
             <Swatch className="bg-gap">Measurement gaps under 30 min ({fmtNum(dataset.gaps.length)})</Swatch>
@@ -94,6 +93,14 @@ function Swatch({ className, children }: { className: string; children: ReactNod
   )
 }
 
+const timeAxis = (ticks: number[]) => ({ axisLabel: { customValues: ticks }, axisTick: { customValues: ticks } })
+
+/** First and last time of all series: the extent of the timeline's x axis. */
+function extent({ target, references }: Dataset): [number, number] {
+  const grids = [target, ...references].map((s) => s.grid)
+  return [Math.min(...grids.map((g) => g.t0)), Math.max(...grids.map((g) => g.t0 + (g.values.length - 1) * STEP_MS))]
+}
+
 function timelineOption(dataset: Dataset, t: ChartTheme) {
   const refs = dataset.references
   const areas = (spans: Span[], fill: string) => spans.map((s) => [{ xAxis: s.startMs, itemStyle: { color: fill } }, { xAxis: s.endMs }])
@@ -111,7 +118,7 @@ function timelineOption(dataset: Dataset, t: ChartTheme) {
         ])
       },
     },
-    xAxis: { type: 'time' },
+    xAxis: { type: 'time', ...timeAxis(axisTimes(...extent(dataset))) },
     yAxis: { type: 'value', name: 'm/s', min: 0 },
     dataZoom: [{ type: 'slider', height: t.label * 2, bottom: t.label * 0.5 }],
     brush: {
@@ -125,7 +132,7 @@ function timelineOption(dataset: Dataset, t: ChartTheme) {
     series: [
       ...refs.map((r, i) => ({
         id: `ref-${i}`,
-        name: refs.length > 1 ? r.id : 'Reference',
+        name: refs.length > 1 ? 'Reference farms' : 'Reference',
         type: 'line',
         data: gridPoints(r.grid),
         lineStyle: { color: t.reference, width: t.lineThin, type: i ? 'dashed' : 'solid' },
@@ -155,6 +162,19 @@ function Timeline({ dataset, outage }: { dataset: Dataset; outage?: Span }) {
         })
       chart.dispatchAction({ type: 'takeGlobalCursor', key: 'brush', brushOption: { brushType: 'lineX', brushMode: 'single' } })
       draw()
+      chart.off('datazoom')
+      chart.on('datazoom', () => {
+        const [from, to] = extent(dataset)
+        const { start, end } = (chart.getOption() as { dataZoom: { start: number; end: number }[] }).dataZoom[0]
+        chart.setOption({ xAxis: timeAxis(axisTimes(from + ((to - from) * start) / 100, from + ((to - from) * end) / 100)) })
+      })
+      chart.getZr().off('click')
+      chart.getZr().on('click', ({ offsetX, offsetY }) => {
+        if (!chart.containPixel({ gridIndex: 0 }, [offsetX, offsetY])) return
+        const ms = chart.convertFromPixel({ xAxisIndex: 0 }, offsetX)
+        const hit = dataset.outages.find((o) => o.startMs <= ms && ms < o.endMs)
+        if (hit) store.setOutage(hit)
+      })
       chart.off('brushEnd')
       chart.on('brushEnd', (e) => {
         const [area] = (e as { areas: { coordRange: [number, number] }[] }).areas
@@ -163,13 +183,12 @@ function Timeline({ dataset, outage }: { dataset: Dataset; outage?: Span }) {
         else draw()
       })
     },
-    [outage],
+    [dataset, outage],
   )
   return <Chart option={option} onChart={onChart} className="h-chart" />
 }
 
 function PeriodFields({ outage }: { outage: Span }) {
-  const steps = (outage.endMs - outage.startMs) / STEP_MS
   return (
     <div className="flex flex-wrap items-end gap-4 border-t pt-3">
       <DateField
@@ -178,13 +197,12 @@ function PeriodFields({ outage }: { outage: Span }) {
         commit={(startMs) => (startMs < outage.endMs ? store.setOutage({ ...outage, startMs }) : 'The start must be before the end.')}
       />
       <DateField
-        label="End, exclusive (Europe/Berlin)"
+        label="End (Europe/Berlin)"
         ms={outage.endMs}
         commit={(endMs) => (endMs > outage.startMs ? store.setOutage({ ...outage, endMs }) : 'The end must be after the start.')}
       />
       <p className="pb-2 text-label text-muted-foreground tabular-nums">
-        <span className="font-medium text-foreground">{fmtDuration(outage.endMs - outage.startMs)}</span> · {fmtNum(steps)} values of 10 min
-        to predict
+        <span className="font-medium text-foreground">{fmtDuration(outage.endMs - outage.startMs)}</span>
       </p>
     </div>
   )

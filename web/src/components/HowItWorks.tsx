@@ -20,11 +20,17 @@ export const BENCHMARK = {
   ],
 }
 
-const STEPS: { title: string; task: string; body: ReactNode; tex?: string }[] = [
+const STEPS: { title: string; task: string; body: ReactNode; tex?: string; legend?: [string, string][] }[] = [
   {
     title: 'Analyze',
     task: 'Learn how the wind at both farms is related, from the data outside the outage.',
     tex: String.raw`\hat{v}_t = a_{s(t)} + \sum_i b_{s(t),i} \cdot v_i(t - \tau_i)`,
+    legend: [
+      [String.raw`\hat{v}_t`, 'predicted target wind'],
+      [String.raw`v_i`, 'wind at reference farm i'],
+      [String.raw`a_s, b_{s,i}`, 'intercept and weights for wind direction sector s'],
+      [String.raw`\tau_i`, 'delay of reference farm i'],
+    ],
     body: (
       <>
         A weighted sum of all reference farms, fitted by least squares on the 10-minute values outside the outage. Each reference is read
@@ -49,6 +55,14 @@ const STEPS: { title: string; task: string; body: ReactNode; tex?: string }[] = 
     title: 'Calculate',
     task: 'Turn the predicted wind into lost energy with the power curve.',
     tex: String.raw`\hat{P}_t = \mathbb{E}\left[P\big(v \cdot (\rho_t / 1.225)^{1/3}\big)\right], \quad v \sim \mathcal{N}(\hat{v}_t, \sigma_t^2)`,
+    legend: [
+      [String.raw`\hat{P}_t`, 'expected power'],
+      [String.raw`P(v)`, 'power curve'],
+      [String.raw`\rho_t`, 'air density at the target'],
+      [String.raw`\mathbb{E}`, 'expected value'],
+      [String.raw`\mathcal{N}`, 'normal distribution'],
+      [String.raw`\sigma_t`, 'prediction error spread'],
+    ],
     body: (
       <>
         The power is averaged over the uncertainty instead of read at the predicted wind alone, which gives back the peaks a fitted line
@@ -79,7 +93,7 @@ export const HowItWorks = observer(function HowItWorks() {
           </SheetDescription>
         </SheetHeader>
         <ol className="flex flex-col gap-5 px-4">
-          {STEPS.map(({ title, task, body, tex }, i) => (
+          {STEPS.map(({ title, task, body, tex, legend }, i) => (
             <li key={title} className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1">
               <span className="flex size-7 items-center justify-center rounded-full bg-primary text-label font-semibold text-primary-foreground">
                 {i + 1}
@@ -88,7 +102,23 @@ export const HowItWorks = observer(function HowItWorks() {
                 {title}: <span className="font-normal text-muted-foreground">{task}</span>
               </p>
               <div className="col-start-2 flex flex-col gap-2 text-pretty">
-                {tex && <Formula tex={tex} />}
+                {tex && (
+                  <div className="flex flex-wrap items-center gap-x-6 gap-y-2 [&_math]:text-left">
+                    <Formula tex={tex} />
+                    {legend && (
+                      <dl className="grid grid-cols-[auto_1fr] gap-x-2 text-label text-muted-foreground">
+                        {legend.map(([symbol, meaning]) => (
+                          <div key={symbol} className="contents">
+                            <dt className="text-body text-foreground">
+                              <Formula tex={symbol} inline />
+                            </dt>
+                            <dd className="self-center">{meaning}</dd>
+                          </div>
+                        ))}
+                      </dl>
+                    )}
+                  </div>
+                )}
                 <p>{body}</p>
               </div>
             </li>
@@ -125,8 +155,7 @@ export const HowItWorks = observer(function HowItWorks() {
           </table>
           <p className="text-pretty">
             Linear regression wins on wind and on energy. Variance ratio keeps the spread of the wind, but averaging the power over the
-            uncertainty already gives that spread back to the regression. Harder-to-explain models such as gradient boosting are not offered:
-            when accuracy and explainability conflict, the task asks for explainability.
+            uncertainty already gives that spread back to the regression.
           </p>
           <p className="text-label text-muted-foreground">Harness run of {BENCHMARK.run}.</p>
         </section>

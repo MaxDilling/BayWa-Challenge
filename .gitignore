@@ -6,6 +6,7 @@ dist/
 runs/
 screenshots/
 data/challenge/
+data/data_hackathon_baywa_re
 data/dwd/
 node_modules/
 web/dist/

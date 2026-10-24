@@ -1,4 +1,4 @@
-# Nordex 5000 kW at 1.100 kg/m³ capped at 4500 kW · cut-out 26 m/s
+# Nordex N149/4.0-4.5 · 4500 kW · cut-out 26 m/s · the 5000 kW table at 1.100 kg/m³ capped at 4500 kW
 # Source: knowledge/nordex_5000kw_dichte.csv (team · manufacturer table · 24.10.2026) · column 1.100 kg/m³ · the densest in the table
 # Capped to the 4.5 MW rating of the challenge curve; its own 4.5 MW mode approaches 4500 kW more gently between 9 and 11.5 m/s.
 wind_speed_ms,power_kw

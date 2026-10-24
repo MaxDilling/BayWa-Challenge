@@ -15,7 +15,8 @@ export default defineConfig(({ mode }) => ({
   plugins: [react(), tailwindcss(), ...(mode === 'single' ? [viteSingleFile()] : [])],
   resolve: { alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) } },
   publicDir: mode === 'single' ? false : 'public',
-  build: { outDir: mode === 'single' ? 'dist/single' : 'dist/web' },
+  // jsPDF's HTML and SVG import, which the report does not use, would pull in html2canvas, DOMPurify and canvg.
+  build: { outDir: mode === 'single' ? 'dist/single' : 'dist/web', rollupOptions: { external: ['html2canvas', 'dompurify', 'canvg'] } },
   worker: { format: 'es' },
   server: { fs: { allow: ['..'] } },
 }))

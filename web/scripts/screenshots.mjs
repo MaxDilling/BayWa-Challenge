@@ -1,15 +1,19 @@
 // Screenshots of every GUI step for review: desktop, mobile, dark, an upload error, all demo files dropped at once,
 // data that triggers plausibility warnings, the method sheet and the py engine.
 // Usage (after make build): node web/scripts/screenshots.mjs [outDir]. Exits 1 on any console error.
+// Without outDir each run gets the next screenshots/v<n> and a taken.json with every image's hash, so that
+// scripts/annotated.mjs finds the images the team drew on later.
 import { spawn } from 'node:child_process'
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { createHash } from 'node:crypto'
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { chromium } from 'playwright'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..')
-const out = resolve(process.argv[2] ?? join(root, 'screenshots'))
+const versions = existsSync(join(root, 'screenshots')) ? readdirSync(join(root, 'screenshots')).map((d) => Number(/^v(\d+)$/.exec(d)?.[1] ?? 0)) : []
+const out = resolve(process.argv[2] ?? join(root, 'screenshots', `v${Math.max(0, ...versions) + 1}`))
 const single = pathToFileURL(join(root, 'dist/windgap.html')).href
 const PORT = 8137
 const STEPS = ['upload', 'outage', 'method', 'results', 'export']
@@ -60,9 +64,8 @@ await empty.locator('input[type=file]').first().setInputFiles(join(root, 'fixtur
 await shot(empty, 'upload-error.png')
 const demo = ['target', 'reference', 'power_curve'].map((f) => join(root, `data/synthetic/demo_${f}.csv`))
 await empty.locator('input[type=file]').first().setInputFiles(demo)
-await empty.getByText('How many turbines does the target farm have?').waitFor()
+await empty.getByText('kWh lost').waitFor({ state: 'attached' })
 await shot(empty, 'upload-all-files.png')
-await empty.getByLabel('How many turbines').fill('4')
 await empty.getByText('kWh lost').waitFor({ state: 'attached' })
 await empty.locator('nav[aria-label=Steps] button').nth(3).click()
 await shot(empty, 'upload-all-files-results.png')
@@ -77,7 +80,6 @@ writeFileSync(join(scratch, 'reference.csv'), reference)
 writeFileSync(join(scratch, 'curve.csv'), curve.replace(/,([\d.]+)$/gm, (_, kw) => `,${kw / 1000}`))
 const warned = await open('warnings', single, DESKTOP)
 await warned.locator('input[type=file]').first().setInputFiles(['target.csv', 'reference.csv', 'curve.csv'].map((f) => join(scratch, f)))
-await warned.getByRole('button', { name: /^Confirm/ }).click()
 await warned.getByText('kWh lost').waitFor({ state: 'attached' })
 await shot(warned, 'warnings-1-upload.png')
 await warned.locator('nav[aria-label=Steps] button').nth(3).click()
@@ -93,7 +95,6 @@ const values = refRows.map((r) => r.split(',')[1]).reverse()
 writeFileSync(join(scratch, 'far_away.csv'), [refHead, ...refRows.map((r, i) => `${r.split(',')[0]},${values[i]}`)].join('\n'))
 const pool = await open('references', single, DESKTOP)
 await pool.locator('input[type=file]').first().setInputFiles([...demo, join(scratch, 'far_away.csv')])
-await pool.getByLabel('How many turbines').fill('4')
 await pool.getByText('kWh lost').waitFor({ state: 'attached' })
 await pool.locator('nav[aria-label=Steps] button').nth(2).click()
 await shot(pool, 'references-3-method.png')
@@ -128,6 +129,8 @@ try {
 }
 
 await browser.close()
+const hash = (file) => createHash('sha256').update(readFileSync(join(out, file))).digest('hex')
+writeFileSync(join(out, 'taken.json'), JSON.stringify({ taken: new Date().toISOString(), sha256: Object.fromEntries(shots.map((f) => [f, hash(f)])) }, null, 2) + '\n')
 console.log(`${shots.length} screenshots in ${out}`)
 if (problems.length) {
   console.error(problems.join('\n'))

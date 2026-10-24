@@ -1,7 +1,7 @@
 // Realistic uploads through the all-files zone, on both engines: a DWD pair with 24 h blanked, German-format files,
 // a reference farm exported as one CSV with several turbines, and one year of 10-minute data. Fails on console errors,
-// on an analysis error or NaN on the page; prints the time from the drop to the assignment, and from confirming the
-// turbine count to the result and to the full method comparison. Usage (after make build and make dwd): node web/scripts/robustness.mjs [outDir]
+// on an analysis error or NaN on the page; prints the time from the drop to the assignment, and from there
+// to the result and to the full method comparison. Usage (after make build and make dwd): node web/scripts/robustness.mjs [outDir]
 import { spawn } from 'node:child_process'
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -115,13 +115,9 @@ async function run(engine, url) {
     await step(0)
     const dropped = Date.now()
     await page.locator('input[type=file]').first().setInputFiles(files)
-    const ask = page.getByLabel('How many turbines')
-    await ask.waitFor()
+    await page.getByRole('button', { name: /^Make (target|reference)$/ }).first().waitFor()
     const imported = Date.now() - dropped
     const started = Date.now()
-    await ask.fill('3')
-    const confirm = page.getByRole('button', { name: /^Confirm/ })
-    if (await confirm.isVisible()) await confirm.click()
     await page.getByText('kWh lost').waitFor({ state: 'attached', timeout: 30_000 })
     const result = Date.now() - started
     await step(2)

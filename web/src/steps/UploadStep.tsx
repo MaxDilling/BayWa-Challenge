@@ -12,7 +12,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { ImportError, KNOWN_CURVES, loadDemo, parsePowerCurveCsv, parseWindCsv, readFiles, turbineCount, type PowerCurve, type WindSeries } from '@/data'
 import { cn } from '@/lib/utils'
-import { store } from '@/state/store'
+import { ASK_TURBINES, store } from '@/state/store'
 
 const WIND_HINT = 'CSV or Excel with a timestamp (Europe/Berlin) and the 10-minute wind speed in m/s; a wind direction column is used too.'
 
@@ -75,8 +75,8 @@ const RoleZones = observer(function RoleZones() {
         <DropZone
           title="Power curve"
           hint="CSV with wind speed (m/s) and power (kW) of one turbine."
-          read={(name, text) => ({ curve: parsePowerCurveCsv(text), turbines: turbineCount(name, text), name })}
-          onRead={([{ curve, turbines, name }]) => store.setPowerCurve(curve, turbines, name)}
+          read={(name, text) => ({ name, curve: parsePowerCurveCsv(text), turbines: turbineCount(name, text) })}
+          onRead={([upload]) => store.setUploadedCurve(upload)}
         >
           {powerCurve && <CurveReport curve={powerCurve} />}
         </DropZone>
@@ -124,17 +124,18 @@ const AllFiles = observer(function AllFiles() {
         )
       )}
       <KnownCurves />
-      {store.powerCurve && <TurbineDecision />}
+      {ASK_TURBINES && store.powerCurve && <TurbineDecision />}
     </Section>
   )
 })
 
 const KnownCurves = observer(function KnownCurves() {
+  const { uploadedCurve } = store
   return (
     <div className="flex flex-wrap items-center gap-2 text-label">
-      <span className="text-muted-foreground">No power curve file? Use the published curve of</span>
-      {KNOWN_CURVES.map(({ name, curve }) => (
-        <Button key={name} size="sm" variant={store.powerCurve === curve ? 'default' : 'outline'} onClick={() => store.setPowerCurve(curve)}>
+      <span className="text-muted-foreground">{uploadedCurve ? 'Power curve' : 'No power curve file? Use the published curve of'}</span>
+      {[...(uploadedCurve ? [uploadedCurve] : []), ...KNOWN_CURVES].map(({ name, curve }) => (
+        <Button key={name} size="sm" variant={store.powerCurve === curve ? 'default' : 'outline'} onClick={() => store.chooseCurve(curve)}>
           {name}
         </Button>
       ))}
@@ -144,8 +145,9 @@ const KnownCurves = observer(function KnownCurves() {
 
 const AssignmentView = observer(function AssignmentView() {
   const { assignment, targets, powerCurve, files } = store
-  const { series, targetCandidates, errors } = assignment!
+  const { series, fileOf, targetCandidates, powerCurveFile, errors } = assignment!
   const isTarget = (s: WindSeries) => targets.some((t) => t.id === s.id)
+  const listed = new Set([...Object.values(fileOf), powerCurveFile])
   const ask = !targets.length && series.length > 1
   return (
     <>
@@ -154,11 +156,9 @@ const AssignmentView = observer(function AssignmentView() {
           {fmtNum(files.length)} file{files.length === 1 ? '' : 's'}:
         </span>
         {files.map((f) => (
-          <Badge key={f.name} variant="outline" className="gap-1 pr-0.5">
+          <Badge key={f.name} variant="outline" className={cn('gap-1', !listed.has(f.name) && 'pr-0.5')}>
             {f.name}
-            <Button variant="ghost" size="icon-xs" onClick={() => store.removeFile(f.name)} aria-label={`Remove ${f.name}`}>
-              <X />
-            </Button>
+            {!listed.has(f.name) && <RemoveFile file={f.name} />}
           </Badge>
         ))}
       </div>
@@ -187,18 +187,22 @@ const AssignmentView = observer(function AssignmentView() {
               <Button size="xs" variant="ghost" onClick={() => store.toggleTarget(s.id)}>
                 {isTarget(s) ? 'Make reference' : 'Make target'}
               </Button>
+              <RemoveFile file={fileOf[s.id]} />
             </span>
           </li>
         ))}
         <li className="flex items-center justify-between gap-3 px-3 py-2">
           <span className="min-w-0">
             <span className="block font-medium">Power curve</span>
-            {assignment!.powerCurveFile && <span className="block truncate text-muted-foreground">{assignment!.powerCurveFile}</span>}
+            {powerCurveFile && <span className="block truncate text-muted-foreground">{powerCurveFile}</span>}
           </span>
-          {assignment!.powerCurve ? (
-            <Badge variant="secondary">
-              <Check /> found
-            </Badge>
+          {powerCurveFile ? (
+            <span className="flex items-center gap-2">
+              <Badge variant="secondary">
+                <Check /> found
+              </Badge>
+              <RemoveFile file={powerCurveFile} />
+            </span>
           ) : (
             <span className="text-muted-foreground">{powerCurve ? 'kept from before' : 'not among the files; pick a turbine or add it below'}</span>
           )}
@@ -210,6 +214,15 @@ const AssignmentView = observer(function AssignmentView() {
     </>
   )
 })
+
+/** Removes a dropped file with every series it holds. */
+function RemoveFile({ file }: { file: string }) {
+  return (
+    <Button variant="ghost" size="icon-xs" onClick={() => store.removeFile(file)} aria-label={`Remove ${file}`} title={`Remove ${file}`}>
+      <X />
+    </Button>
+  )
+}
 
 function Facts({ title, action, rows }: { title: string; action?: ReactNode; rows: [string, ReactNode][] }) {
   return (

@@ -18,6 +18,10 @@ export const STEPS = ['upload', 'outage', 'method', 'results', 'export'] as cons
 export type Step = (typeof STEPS)[number]
 
 type Inputs = { targets?: WindSeries[]; references?: WindSeries[] }
+export type UploadedCurve = { name: string; curve: PowerCurve; turbines?: number }
+
+/** Every target is one turbine (team decision, 24.10.); true brings back the turbine count as a decision on the Upload step. */
+export const ASK_TURBINES = false
 export type DroppedFile = { name: string; text: string }
 
 /** Python errors arrive as a traceback; the last line without the exception type is the message for people. */
@@ -58,8 +62,10 @@ export const RootStore = types
     assignment: undefined as Assignment | undefined,
     /** Where the proposed turbine count was read, e.g. the power curve's file name. */
     turbinesSource: undefined as string | undefined,
-    /** The dropped file the power curve came from; undefined for a built-in curve or one added by role. */
+    /** The dropped file the uploaded curve came from; undefined for one added by role. */
     powerCurveFile: undefined as string | undefined,
+    /** The power curve from a file, offered next to the built-in ones. */
+    uploadedCurve: undefined as UploadedCurve | undefined,
     /** The DWD stations on offer, empty until loaded. */
     dwd: [] as WindSeries[],
   }))
@@ -135,13 +141,22 @@ export const RootStore = types
       self.outages = {}
       self.fillOutages()
     },
-    /** A new power curve; `turbines` is a count the file states, proposed but not confirmed. */
-    setPowerCurve(powerCurve: PowerCurve | undefined, turbines?: number, source?: string) {
-      self.powerCurve = powerCurve
-      if (turbines) self.nTurbines = turbines
-      self.turbinesSource = turbines ? source : undefined
-      self.turbinesConfirmed = !powerCurve
+    /** A power curve from a file is chosen; when its file is gone, so is the choice of it, not that of a built-in curve. */
+    setUploadedCurve(upload: UploadedCurve | undefined) {
+      if (upload || self.powerCurve === self.uploadedCurve?.curve) self.powerCurve = upload?.curve
+      self.uploadedCurve = upload
       self.powerCurveFile = undefined
+      if (ASK_TURBINES && upload) {
+        if (upload.turbines) self.nTurbines = upload.turbines
+        self.turbinesSource = upload.turbines ? upload.name : undefined
+        self.turbinesConfirmed = false
+      }
+      self.fillOutages()
+    },
+    /** The uploaded curve or a built-in one, by button. */
+    chooseCurve(curve: PowerCurve) {
+      self.powerCurve = curve
+      if (ASK_TURBINES) self.turbinesConfirmed = false
       self.fillOutages()
     },
     setTurbines(n: number) {
@@ -170,6 +185,7 @@ export const RootStore = types
       self.assignment = undefined
       self.turbinesSource = undefined
       self.powerCurveFile = undefined
+      self.uploadedCurve = undefined
       self.setInputs({ targets: [target], references })
     },
     /** Assign all dropped files again: targets the user chose stay while their series exist, else the assignment's. */
@@ -178,9 +194,9 @@ export const RootStore = types
       self.assignment = assignment
       const series = assignment?.series ?? []
       if (assignment?.powerCurve && assignment.powerCurveFile !== self.powerCurveFile) {
-        self.setPowerCurve(assignment.powerCurve, assignment.turbines, assignment.powerCurveFile)
+        self.setUploadedCurve({ name: assignment.powerCurveFile!, curve: assignment.powerCurve, turbines: assignment.turbines })
         self.powerCurveFile = assignment.powerCurveFile
-      } else if (!assignment?.powerCurve && self.powerCurveFile) self.setPowerCurve(undefined)
+      } else if (!assignment?.powerCurve && self.powerCurveFile) self.setUploadedCurve(undefined)
       const kept = self.targets.filter((t) => series.some((s) => s.id === t.id)).map((t) => t.id)
       self.targetsChosen &&= kept.length > 0
       const ids = self.targetsChosen ? kept : (assignment?.targets ?? [])

@@ -23,8 +23,8 @@ PREDICT = GOLDEN.parent / "predict" / "demo.csv"
 
 
 def demo_prediction() -> str:
-    """harness.predict on the demo files with the GUI's demo settings (4 turbines, recommended model)."""
-    csv, _, _ = predict(DEMO / "demo_target.csv", [DEMO / "demo_reference.csv"], DEMO / "demo_power_curve.csv", 4,
+    """harness.predict on the demo files with the GUI's demo settings (one turbine, recommended model)."""
+    csv, _, _ = predict(DEMO / "demo_target.csv", [DEMO / "demo_reference.csv"], DEMO / "demo_power_curve.csv", 1,
                         registry.RECOMMENDED)
     return csv
 

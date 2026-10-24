@@ -14,6 +14,7 @@ import {
   type CurveOption,
   type Dataset,
   type Span,
+  type Warning,
   type WindSeries,
 } from '@/data'
 import type { Case } from '@/components/metrics'
@@ -170,10 +171,17 @@ export const RootStore = types
     get calculated(): Required<Case>[] {
       return self.shown.flatMap((d) => self.cases.filter((c): c is Required<Case> => c.dataset === d && !!c.response))
     },
-    /** The checks of the target on view, or under Total of every target, each named. */
+    /** The checks of the target on view, or under Total of every target, a check shared by several targets once with all their names. */
     get warnings() {
       if (!self.showsTotal) return self.target ? self.warningsOf(self.target.id) : []
-      return self.targets.flatMap((t) => self.warningsOf(t.id).map((w) => ({ ...w, title: `${self.nameOf(t.id)}: ${w.title}` })))
+      const named = new Map<string, { warning: Warning; names: string[] }>()
+      for (const t of self.targets)
+        for (const w of self.warningsOf(t.id)) {
+          const key = JSON.stringify([w.step, w.title, w.detail])
+          if (!named.has(key)) named.set(key, { warning: w, names: [] })
+          named.get(key)!.names.push(self.nameOf(t.id))
+        }
+      return [...named.values()].map(({ warning, names }) => ({ ...warning, title: `${names.join(', ')}: ${warning.title}` }))
     },
   }))
   .actions((self) => ({

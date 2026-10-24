@@ -98,8 +98,8 @@
     --series-reference: var(--blue-500);
     --series-prediction: var(--brand-600);
     --series-band: var(--brand-400);
-    --series-outage: var(--red-100);
-    --series-outage-edge: var(--red-600);
+    --series-outage: var(--amber-100);
+    --series-outage-edge: var(--amber-500);
     --series-gap: var(--neutral-200);
     --series-energy: var(--amber-500);
 
@@ -178,8 +178,8 @@
     --series-reference: var(--blue-400);
     --series-prediction: var(--brand-400);
     --series-band: var(--brand-300);
-    --series-outage: var(--red-950);
-    --series-outage-edge: var(--red-400);
+    --series-outage: var(--amber-900);
+    --series-outage-edge: var(--amber-400);
     --series-gap: var(--neutral-800);
     --series-energy: var(--amber-400);
 

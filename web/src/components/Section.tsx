@@ -15,7 +15,7 @@ interface Props {
 export function Section({ id, title, description, action, className, children }: Props) {
   return (
     <Card id={id} className={cn('shadow-card', className)}>
-      <CardHeader>
+      <CardHeader className="gap-x-6">
         <CardTitle>{title}</CardTitle>
         {description && <CardDescription className="text-label">{description}</CardDescription>}
         {action && <CardAction>{action}</CardAction>}

@@ -115,7 +115,7 @@ async function run(engine, url) {
     await step(0)
     const dropped = Date.now()
     await page.locator('input[type=file]').first().setInputFiles(files)
-    await page.getByRole('button', { name: /^Make (target|reference)$/ }).first().waitFor()
+    await page.getByRole('radio', { name: 'Target' }).first().waitFor()
     const imported = Date.now() - dropped
     const started = Date.now()
     await page.getByText('kWh lost').waitFor({ state: 'attached', timeout: 30_000 })

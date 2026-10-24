@@ -289,7 +289,7 @@ function SeriesReport({ series, target, correlation, onRemove }: { series: WindS
   ]
   if (report.negative) rows.push(['Negative', `${fmtNum(report.negative)}, counted as missing`])
   if (report.ignoredColumns.length) rows.push(['Ignored columns', report.ignoredColumns.join(', ')])
-  if (correlation !== undefined) rows.push(['Correlation r', `${fmtNum(correlation, 3)} with the target, before the outage`])
+  if (correlation !== undefined) rows.push(['Correlation r', `${fmtNum(correlation, 3)} with the target, outside the outage`])
   if (target) rows.push(['Power curve', <CurveSelect target={series.id} />])
   return <Facts title={series.id} rows={rows} action={<Remove what={series.id} onClick={onRemove} />} />
 }

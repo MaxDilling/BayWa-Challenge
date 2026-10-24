@@ -58,12 +58,14 @@ export function plausibility(dataset: Dataset, outage?: Span, r?: number): Warni
       detail: 'The reference misses these 10-minute values during the outage; they are interpolated linearly from their neighbours.',
     })
 
-  const before = target.grid.values.slice(0, Math.max(0, (outage.startMs - target.grid.t0) / STEP_MS)).filter((v) => v != null).length
-  if (before < MIN_TRAIN_STEPS)
+  const first = (outage.startMs - target.grid.t0) / STEP_MS
+  const last = (outage.endMs - target.grid.t0) / STEP_MS
+  const known = target.grid.values.filter((v, i) => v != null && (i < first || i >= last)).length
+  if (known < MIN_TRAIN_STEPS)
     warnings.push({
       step: 'outage',
-      title: 'Little data before the outage',
-      detail: `The model learns from ${fmtNum(before / 144, 1)} days of target data before the outage; 5 days or more make the fit and the backtest reliable.`,
+      title: 'Little data outside the outage',
+      detail: `The model learns from ${fmtNum(known / 144, 1)} days of target data outside the outage; 5 days or more make the fit and the backtest reliable.`,
     })
 
   const targetEnd = target.grid.t0 + target.grid.values.length * STEP_MS

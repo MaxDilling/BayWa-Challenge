@@ -10,7 +10,7 @@ import pandas as pd
 
 import windgap
 from windgap.backtest import MIN_TRAIN_STEPS, backtest, predict_window
-from windgap.core.energy import energy_loss, expected_power
+from windgap.core.energy import RHO_CURVE, air_density, energy_loss, expected_power, target_density
 from windgap.core.grid import align, directions, from_ms, grid_to_series, to_ms
 from windgap.core.schema import STEP, STEP_S, Outage, PowerCurve
 from windgap.models import registry
@@ -45,14 +45,15 @@ def analyze(req: dict) -> dict:
         raise ValueError("references must be complete during the outage; gap filling belongs to the import step")
 
     name, params = req["model"], req.get("params") or {}
-    train = df.index < outage.start
-    if (n_train := int(target[train].notna().sum())) < MIN_TRAIN_STEPS:
-        raise ValueError(f"The target has {n_train} values before the outage; at least {MIN_TRAIN_STEPS} "
+    known = target.where((df.index < outage.start) | (df.index >= outage.end))
+    if (n_train := int(known.notna().sum())) < MIN_TRAIN_STEPS:
+        raise ValueError(f"The target has {n_train} values outside the outage; at least {MIN_TRAIN_STEPS} "
                          "(one day) are needed to learn from.")
-    extra_train = None if extra is None else extra[train]
-    model = registry.create(name, **params).fit(target[train], refs[train], extra_train)
+    model = registry.create(name, **params).fit(known, refs, extra)
     pred = predict_window(model, refs, outage.start, outage.end, extra)
-    energy = energy_loss(expected_power(pred, curve), outage, model.errors.acf)
+    density = _density(req, df.index, outage)
+    factor = 1.0 if density is None else ((density.kg_m3 / RHO_CURVE) ** (1 / 3)).to_numpy()
+    energy = energy_loss(expected_power(pred, curve, factor), outage, model.errors.acf)
     explanation = model.explain()
 
     return {
@@ -63,7 +64,7 @@ def analyze(req: dict) -> dict:
             "q10": _floats(pred["q10"]),
             "q90": _floats(pred["q90"]),
         },
-        "validation": _finite(backtest(name, params, target[train], refs[train], curve, len(outage_index), extra_train)),
+        "validation": _finite(backtest(name, params, known, refs, curve, outage.start, len(outage_index), extra)),
         "explanation": {
             "summary": explanation.summary,
             "formula": explanation.formula,
@@ -75,10 +76,26 @@ def analyze(req: dict) -> dict:
             "kwhP50": energy.kwh_p50,
             "kwhP90": energy.kwh_p90,
             "cumulativeKwh": _floats(energy.cumulative),
+            **({} if density is None else {"airDensity": {
+                "kgM3": float(density.kg_m3.mean()),
+                "ratio": density.ratio,
+                "kwhP50AtCurveDensity": energy_loss(expected_power(pred, curve), outage, model.errors.acf).kwh_p50,
+            }}),
         },
-        "scatter": _scatter(target[train], refs[train], extra_train, model, explanation.diagnostics),
+        "scatter": _scatter(known, refs, extra, model, explanation.diagnostics),
         "engine": {"id": "py", "version": windgap.__version__, "ms": (time.perf_counter() - started) * 1000},
     }
+
+
+def _density(req: dict, index: pd.DatetimeIndex, outage: Outage):
+    """Air density at the target in the outage (S4), from the temperature and pressure of target and references."""
+    def rho(temperature, pressure) -> pd.Series:
+        return air_density(grid_to_series(temperature), grid_to_series(pressure)).reindex(index)
+
+    if not (req.get("targetTemperature") and req.get("targetPressure")):
+        return None
+    refs = [rho(r["temperature"], r["pressure"]) for r in req["references"] if r.get("temperature") and r.get("pressure")]
+    return target_density(rho(req["targetTemperature"], req["targetPressure"]), pd.concat(refs, axis=1), outage) if refs else None
 
 
 def _scatter(target: pd.Series, refs: pd.DataFrame, extra: pd.DataFrame | None, model, diagnostics: dict) -> dict:

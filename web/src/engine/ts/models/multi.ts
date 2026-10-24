@@ -9,20 +9,20 @@ const SUMMARY =
   'count more and their independent errors partly cancel. A reference that would get a negative weight is left out.'
 const WAKE_SUMMARY =
   ' A factor per wind direction sector then corrects what the references cannot see, such as the wake of a ' +
-  'neighbouring turbine: it is the measured over the predicted wind in that sector before the outage, pulled towards ' +
+  'neighbouring turbine: it is the measured over the predicted wind in that sector outside the outage, pulled towards ' +
   '1 where the sector has few values.'
 
 export class MultiRegression implements WindModel {
   errors!: Errors
-  private lagMax: number
-  private lags: number[] = []
-  private rRefs: number[] = []
-  private used: number[] = []
+  protected lagMax: number
+  protected lags: number[] = []
+  protected rRefs: number[] = []
+  protected used: number[] = []
   private a = NaN
   private b: number[] = []
-  private r = NaN
-  private nTrain = 0
-  private sectors: number
+  protected r = NaN
+  protected nTrain = 0
+  protected sectors: number
   private factors: number[] = [1]
   private sectorSteps: number[] = []
 
@@ -32,21 +32,9 @@ export class MultiRegression implements WindModel {
   }
 
   fit(target: Float64Array, refs: Frame, extra?: Frame) {
-    const best = refs.cols.map((x) => bestLag(x, target, this.lagMax))
-    this.rRefs = best.map(([r]) => r)
-    this.lags = best.map(([, lag]) => lag)
-    const x = refs.cols.map((c, i) => shifted(c, this.lags[i]))
-    this.used = this.rRefs.flatMap((r, i) => (Number.isFinite(r) ? [i] : []))
-    let rows: number[]
-    for (;;) {
-      rows = [...target.keys()].filter((t) => !Number.isNaN(target[t]) && this.used.every((i) => !Number.isNaN(x[i][t])))
-      ;[this.a, this.b] = leastSquares(
-        this.used.map((i) => Float64Array.from(rows, (t) => x[i][t])),
-        Float64Array.from(rows, (t) => target[t]),
-      )
-      if (this.used.length === 1 || this.b.every((b) => b >= 0)) break
-      this.used.splice(this.b.indexOf(Math.min(...this.b)), 1)
-    }
+    const x = this.delays(refs, target)
+    const [a, b, cols, rows] = nonnegative(this.used.map((i) => x[i]), target)
+    ;[this.a, this.b, this.used] = [a, b, cols.map((c) => this.used[c])]
     this.nTrain = rows.length
     const inputs = this.used.map((i) => x[i])
     const plain = combine(this.a, this.b, inputs)
@@ -62,9 +50,19 @@ export class MultiRegression implements WindModel {
     return this
   }
 
+  /** Every reference at the delay τᵢ where it tracks the target best (sets rRefs, lags and used = the references with a
+   * correlation); one column per reference, NaN where the shift leaves the grid. */
+  protected delays(refs: Frame, target: Float64Array): Float64Array[] {
+    const best = refs.cols.map((x) => bestLag(x, target, this.lagMax))
+    this.rRefs = best.map(([r]) => r)
+    this.lags = best.map(([, lag]) => lag)
+    this.used = this.rRefs.flatMap((r, i) => (Number.isFinite(r) ? [i] : []))
+    return refs.cols.map((c, i) => shifted(c, this.lags[i]))
+  }
+
   /** Direction sector per step (0 = centred on north) from the circular mean of the references' directions;
    * `sectors` where no reference has a direction. */
-  private sector(extra: Frame | undefined, n: number): Float64Array {
+  protected sector(extra: Frame | undefined, n: number): Float64Array {
     const out = new Float64Array(n).fill(this.sectors)
     if (!extra || !this.sectors) return out
     const width = 360 / this.sectors
@@ -135,6 +133,21 @@ function sectorFactors(pred: Float64Array, y: Float64Array, sector: Float64Array
   }
   for (let s = 0; s < n; s++) factors[s] = (sumY[s] + prior) / (sumPred[s] + prior)
   return [factors, steps]
+}
+
+/** [a, b, cols, rows]: least squares of y on the columns `cols` of x over the rows where all of them and y are measured;
+ * while a weight is negative, the column with the smallest one leaves and the rest is refitted. */
+export function nonnegative(x: Float64Array[], y: Float64Array): [number, number[], number[], number[]] {
+  const cols = x.map((_, i) => i)
+  for (;;) {
+    const rows = [...y.keys()].filter((t) => !Number.isNaN(y[t]) && cols.every((i) => !Number.isNaN(x[i][t])))
+    const [a, b] = leastSquares(
+      cols.map((i) => Float64Array.from(rows, (t) => x[i][t])),
+      Float64Array.from(rows, (t) => y[t]),
+    )
+    if (cols.length === 1 || b.every((v) => v >= 0)) return [a, b, cols, rows]
+    cols.splice(b.indexOf(Math.min(...b)), 1)
+  }
 }
 
 /** a + Σ b_k · x_k per row; NaN where an input is missing. */

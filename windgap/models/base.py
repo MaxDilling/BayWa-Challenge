@@ -41,7 +41,7 @@ class Errors:
 
 
 class WindModel(Protocol):
-    """fit sees only data before the outage; predict uses refs/extra only, never the target.
+    """fit sees the target only outside the outage (NaN inside); predict uses refs/extra only, never the target.
     fit sets `errors`, whose autocorrelation the energy band (S4) needs."""
 
     name: str

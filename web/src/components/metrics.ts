@@ -1,6 +1,6 @@
 // Words for the engine's numbers: validation keys, parameters, references, the backtest verdict and the energy headline,
 // shared by Method, Results, Export and the report.
-import { fmtAmount, fmtDuration, fmtNum, fmtPct } from '@/components/format'
+import { fmtAmount, fmtDuration, fmtNum, fmtPct, STEP_MS } from '@/components/format'
 import type { Dataset, Span, WindSeries } from '@/data'
 import type { AnalyzeResponse } from '@/engine'
 
@@ -54,14 +54,14 @@ export const ACCURACY = ['energy_wape_pct', 'wind_rmse', 'wind_mae', 'power_rmse
 export const KEYS: Record<string, { label: string; unit?: string; digits: number; hint: string }> = {
   a: { label: 'Intercept a', unit: 'm/s', digits: 2, hint: 'Where the line starts: the predicted target wind when the reference is calm.' },
   b: { label: 'Slope b', digits: 3, hint: 'How much the target wind changes per 1 m/s of reference wind.' },
-  r: { label: 'Correlation r', digits: 3, hint: 'How closely target and reference move together before the outage; 1 is perfect, below 0.7 is weak.' },
+  r: { label: 'Correlation r', digits: 3, hint: 'How closely target and reference move together outside the outage; 1 is perfect, below 0.7 is weak.' },
   lag_min: {
     label: 'Delay τ',
     unit: 'min',
     digits: 0,
     hint: 'How long the weather takes from one farm to the other. The model reads the reference this much earlier (later if negative).',
   },
-  n_train: { label: 'Training values', unit: '× 10 min', digits: 0, hint: '10-minute values before the outage where both farms measured.' },
+  n_train: { label: 'Training values', unit: '× 10 min', digits: 0, hint: '10-minute values outside the outage where both farms measured.' },
   sigma_0: {
     label: 'Uncertainty in calm wind',
     unit: 'm/s',
@@ -91,7 +91,11 @@ export function referenceRoles(references: WindSeries[], { params: p, diagnostic
     const r = d[`r_ref_${i}`] === undefined ? 'r n/a' : `r = ${fmtNum(d[`r_ref_${i}`], 3)}`
     if (`b_ref_${i}` in p) {
       const used = p[`b_ref_${i}`] > 0
-      return { id: ref.id, used, role: used ? `weight b = ${fmtNum(p[`b_ref_${i}`], 3)}, delay τ = ${fmtNum(d[`lag_min_ref_${i}`])} min` : 'weight 0, not used' }
+      const bySector = Object.keys(p).filter((k) => new RegExp(`^b_\\d+_ref_${i}$`).test(k)).map((k) => p[k])
+      const weight = bySector.length
+        ? `weights b = ${fmtNum(Math.min(p[`b_ref_${i}`], ...bySector), 3)}–${fmtNum(Math.max(p[`b_ref_${i}`], ...bySector), 3)} by wind direction`
+        : `weight b = ${fmtNum(p[`b_ref_${i}`], 3)}`
+      return { id: ref.id, used, role: used ? `${weight}, delay τ = ${fmtNum(d[`lag_min_ref_${i}`])} min` : 'weight 0, not used' }
     }
     if (d.reference_index === undefined) return { id: ref.id, used: true, role: 'used' }
     const used = i === d.reference_index
@@ -108,7 +112,7 @@ export function referenceText(references: WindSeries[], explanation: Explanation
     return `the reference farm${used.length > 1 ? 's' : ''} ${used.map((x) => `${x.id} (${x.role})`).join(', ')}, weighted by least squares${others.length ? `; ${others.join(', ')} got weight 0` : ''}`
   if (!others.length) return `the neighbouring reference farm ${used[0].id}`
   const d = explanation.diagnostics
-  return `the neighbouring reference farm ${used[0].id} (chosen from ${roles.length} farms because it tracked the target best before the outage, r = ${fmtNum(d[`r_ref_${d.reference_index}`], 3)}; not used: ${others.join(', ')})`
+  return `the neighbouring reference farm ${used[0].id} (chosen from ${roles.length} farms because it tracked the target best outside the outage, r = ${fmtNum(d[`r_ref_${d.reference_index}`], 3)}; not used: ${others.join(', ')})`
 }
 
 const COMPASS = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE', 'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW']
@@ -125,6 +129,31 @@ export function wakeSectors({ params, diagnostics }: Explanation) {
     .sort((a, b) => a.deg - b.deg)
 }
 
+/** The weights per wind direction sector (sector_regression): a sector with its own fit has a_<deg>, the others use the
+ * weights of all directions. Only the references with a weight. */
+export function sectorWeights(references: WindSeries[], { params, diagnostics }: Explanation) {
+  const used = references.flatMap((ref, i) => (params[`b_ref_${i}`] > 0 ? [{ id: ref.id, i }] : []))
+  const sectors = Object.keys(diagnostics)
+    .filter((k) => k.startsWith('sector_steps_'))
+    .map((k) => {
+      const deg = k.slice('sector_steps_'.length)
+      const own = `a_${deg}` in params
+      return {
+        deg: Number(deg),
+        steps: diagnostics[k],
+        own,
+        a: own ? params[`a_${deg}`] : params.a,
+        weights: used.map(({ i }) => (own ? params[`b_${deg}_ref_${i}`] : params[`b_ref_${i}`])),
+      }
+    })
+    .sort((a, b) => a.deg - b.deg)
+  return { references: used.map(({ id }) => id), sectors }
+}
+
+export const SECTOR_TEXT =
+  'How much each reference counts, by the wind direction the references measure. A direction with at least two days of values outside the ' +
+  'outage has its own weights; the others, marked “all”, use the weights fitted on all directions. Predicted wind = a + Σ weight × reference wind.'
+
 /** The wake factors in plain words, led by the strongest sector. */
 export function wakeText(sectors: ReturnType<typeof wakeSectors>) {
   const strongest = sectors.reduce((a, b) => (Math.abs(b.factor - 1) > Math.abs(a.factor - 1) ? b : a))
@@ -132,14 +161,15 @@ export function wakeText(sectors: ReturnType<typeof wakeSectors>) {
   return (
     'From each direction, the target gets this much more or less wind than its references suggest; the model multiplies its prediction ' +
     `by that factor. Strongest: with wind from ${compass(strongest.deg)} the target measures ${fmtNum(Math.abs(change) * 100, 1)} % ` +
-    `${change < 0 ? 'less' : 'more'} (${fmtNum(strongest.steps)} values before the outage)` +
+    `${change < 0 ? 'less' : 'more'} (${fmtNum(strongest.steps)} values outside the outage)` +
     `${change < 0 ? ', typical for the wake of a neighbouring turbine or terrain in that direction' : ''}. Directions with few values ` +
     'are pulled towards 0 %.'
   )
 }
 
-/** Days of target data before the outage that the model could learn from. */
-export const trainingDays = ({ target }: Dataset, outage: Span) => (outage.startMs - target.grid.t0) / 86_400_000
+/** Days of target data outside the outage that the model could learn from. */
+export const trainingDays = ({ target }: Dataset, outage: Span) =>
+  (target.grid.values.length * STEP_MS - (outage.endMs - outage.startMs)) / 86_400_000
 
 /** "Wind Outage Tool, windgap 0.4.0 (TypeScript engine)" */
 export const toolText = ({ engine }: AnalyzeResponse) =>
@@ -170,6 +200,18 @@ export const farmText = ({ nTurbines, powerCurve }: Dataset) =>
 /** "with 80 % probability between 13.1 and 20.9 kWh" */
 export const rangeText = ({ kwhP10, kwhP90 }: AnalyzeResponse['energy']) =>
   `with 80 % probability between ${fmtAmount(kwhP10)} and ${fmtAmount(kwhP90)} kWh`
+
+/** The air density correction of the energy in one sentence (SPEC.md S4). */
+export function densityText({ airDensity: d, kwhP50 }: AnalyzeResponse['energy']): string {
+  if (!d)
+    return 'Not corrected for air density: that needs the temperature and air pressure of the target outside the outage and of a reference farm throughout it.'
+  const change = d.kwhP50AtCurveDensity > 0 ? kwhP50 / d.kwhP50AtCurveDensity - 1 : 0
+  return (
+    `Corrected for air density: ${fmtNum(d.kgM3, 3)} kg/m³ at the target on average during the outage (the reference farms' density × ${fmtNum(d.ratio, 3)}, ` +
+    `the ratio measured outside the outage), where the power curve is for 1.225 kg/m³. ` +
+    (change ? `${change < 0 ? 'Thinner' : 'Denser'} air makes the loss ${fmtPct(Math.abs(change), 1)} ${change < 0 ? 'smaller' : 'larger'} than the ${fmtAmount(d.kwhP50AtCurveDensity)} kWh at the curve's density.` : '')
+  ).trim()
+}
 
 /** The lost energy in one sentence for insurers. */
 export const headline = (energy: AnalyzeResponse['energy']) => `Most likely ${fmtAmount(energy.kwhP50)} kWh; ${rangeText(energy)}.`

@@ -33,20 +33,20 @@ def _leading(mask: np.ndarray) -> int:
 def fold(model: str, params: dict, target: pd.Series, refs: pd.DataFrame, curve: PowerCurve,
          start: pd.Timestamp, end: pd.Timestamp, extra: pd.DataFrame | None = None
          ) -> tuple[pd.DataFrame, dict[str, float]]:
-    """Fit on everything before `start`, predict [start, end), score against the hidden target."""
-    before = target.index < start
+    """Fit on the target on both sides of [start, end), predict it, score against the hidden target."""
     window = (target.index >= start) & (target.index < end)
-    fitted = registry.create(model, **params).fit(target[before], refs[before], None if extra is None else extra[before])
+    fitted = registry.create(model, **params).fit(target.where(~window), refs, extra)
     pred = predict_window(fitted, refs, start, end, extra)
     return pred, evaluate(target[window], pred, curve, fitted.errors.acf)
 
 
 def backtest(model: str, params: dict, target: pd.Series, refs: pd.DataFrame, curve: PowerCurve,
-             length: int, extra: pd.DataFrame | None = None, n_folds: int = 5) -> dict[str, float]:
-    """Summarized metrics over up to `n_folds` outages of `length` steps, tiled backwards from the end of `target`."""
+             before: pd.Timestamp, length: int, extra: pd.DataFrame | None = None, n_folds: int = 5
+             ) -> dict[str, float]:
+    """Summarized metrics over up to `n_folds` outages of `length` steps, tiled backwards from `before`."""
     results = []
     for i in range(1, n_folds + 1):
-        start_pos = len(target) - i * length
+        start_pos = target.index.searchsorted(before) - i * length
         if start_pos < MIN_TRAIN_STEPS:
             break
         start = target.index[start_pos]

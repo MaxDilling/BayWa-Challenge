@@ -26,7 +26,7 @@ class MultiRegression:
                "negative weight is left out.")
     formula = r"\hat{v}_t = a + \sum_i b_i \cdot v_i(t - \tau_i)"
     wake_summary = (" A factor per wind direction sector then corrects what the references cannot see, such as the "
-                    "wake of a neighbouring turbine: it is the measured over the predicted wind in that sector before "
+                    "wake of a neighbouring turbine: it is the measured over the predicted wind in that sector outside "
                     "the outage, pulled towards 1 where the sector has few values.")
     wake_formula = r"\hat{v}_t = f_{s(t)} \cdot \Big(a + \sum_i b_i \cdot v_i(t - \tau_i)\Big)"
 
@@ -36,17 +36,9 @@ class MultiRegression:
 
     def fit(self, target: pd.Series, refs: pd.DataFrame, extra: pd.DataFrame | None = None) -> Self:
         y = target.to_numpy(dtype=float)
-        best = [best_lag(refs.iloc[:, i].to_numpy(dtype=float), y, self.lag_max) for i in range(refs.shape[1])]
-        self.r_refs = [r for r, _ in best]
-        self.lags = [lag for _, lag in best]
-        x = np.column_stack([_shifted(refs.iloc[:, i].to_numpy(dtype=float), lag) for i, lag in enumerate(self.lags)])
-        self.used = [i for i, r in enumerate(self.r_refs) if np.isfinite(r)]
-        while True:
-            ok = ~np.isnan(x[:, self.used]).any(axis=1) & ~np.isnan(y)
-            self.a, self.b = _least_squares(x[ok][:, self.used], y[ok])
-            if len(self.used) == 1 or (self.b >= 0).all():
-                break
-            del self.used[int(np.argmin(self.b))]
+        x = self._delays(refs, y)
+        self.a, self.b, cols, ok = _nonnegative(x[:, self.used], y)
+        self.used = [self.used[c] for c in cols]
         self.n_train = int(ok.sum())
         plain = self.a + x[:, self.used] @ self.b
         sector = self._sector(extra, len(y))
@@ -54,6 +46,15 @@ class MultiRegression:
         self.r = correlation(plain * self.factors[sector], y)
         self.errors = calibrate(np.column_stack([x[:, self.used], sector]), y, self._fit)
         return self
+
+    def _delays(self, refs: pd.DataFrame, y: np.ndarray) -> np.ndarray:
+        """Every reference at the delay τᵢ where it tracks the target best (sets r_refs, lags and used = the references
+        with a correlation); one column per reference, NaN where the shift leaves the grid."""
+        best = [best_lag(refs.iloc[:, i].to_numpy(dtype=float), y, self.lag_max) for i in range(refs.shape[1])]
+        self.r_refs = [r for r, _ in best]
+        self.lags = [lag for _, lag in best]
+        self.used = [i for i, r in enumerate(self.r_refs) if np.isfinite(r)]
+        return np.column_stack([_shifted(refs.iloc[:, i].to_numpy(dtype=float), lag) for i, lag in enumerate(self.lags)])
 
     def _fit(self, x: np.ndarray, y: np.ndarray):
         """Regression and sector factors on the rows given; the last column of x is the sector."""
@@ -110,6 +111,18 @@ def _sector_factors(pred: np.ndarray, y: np.ndarray, sector: np.ndarray, n: int)
     sums_pred = np.bincount(sector[ok], weights=pred[ok], minlength=n)
     factors[:n] = (sums_y + prior) / (sums_pred + prior)
     return factors, np.bincount(sector[ok], minlength=n)
+
+
+def _nonnegative(x: np.ndarray, y: np.ndarray) -> tuple[float, np.ndarray, list[int], np.ndarray]:
+    """(a, b, cols, rows): least squares of y on the columns `cols` of x over the rows where all of them and y are
+    measured; while a weight is negative, the column with the smallest one leaves and the rest is refitted."""
+    cols = list(range(x.shape[1]))
+    while True:
+        rows = ~np.isnan(x[:, cols]).any(axis=1) & ~np.isnan(y)
+        a, b = _least_squares(x[rows][:, cols], y[rows])
+        if len(cols) == 1 or (b >= 0).all():
+            return a, b, cols, rows
+        del cols[int(np.argmin(b))]
 
 
 def _least_squares(x: np.ndarray, y: np.ndarray) -> tuple[float, np.ndarray]:

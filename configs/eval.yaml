@@ -14,9 +14,8 @@ score:
   energy_wape_pct: 1
 
 scenarios:
-  lengths_h: [1, 6, 12, 24, 48, 72, 120]
-  t0_step_h: 12
-  min_train_days: 5
+  lengths_h: [6, 24, 48, 72, 120]
+  t0_step_h: 24
   holdout_days: 5  # locked: only runs with --holdout
 
 # kind synthetic: harness/synthetic.py; kind folder: path glob relative to the repo, layout in harness/datasets.py.
@@ -27,7 +26,7 @@ scenarios:
 datasets:
   - {name: synthetic, kind: synthetic, days: 30, seed: 0}
   - {name: demo, kind: folder, path: data/synthetic}
-  - {name: dwd, kind: folder, path: "data/dwd/*", wind_scale: 1.38, scenarios: {t0_step_h: 24}}
+  - {name: dwd, kind: folder, path: "data/dwd/*", wind_scale: 1.38, scenarios: {t0_step_h: 72}}
   - {name: challenge, kind: folder, path: data/challenge, n_turbines: 1}
   # The organizers' data after `make csv`: each target turbine with the references outside its park (H, O). 90 days
   # and seven references per target: a wider t₀ step keeps the whole run under 30 s.
@@ -49,10 +48,23 @@ datasets:
      extra_refs: [data/dwd_refs/*.csv], on_demand: true,
      scenarios: {t0_step_h: 144}}
 
+  # The whole history as one complete outage: 72-h windows side by side, each predicted from the target data on both
+  # sides of it, so every value before the holdout is reconstructed once.
+  - {name: T1/tiled, kind: folder, path: data/data_hackathon_baywa_re, files: [T1_*.csv, "[HO]*.csv"], target: T1_data,
+     on_demand: true, scenarios: {lengths_h: [72], t0_step_h: 72}}
+  - {name: T2/tiled, kind: folder, path: data/data_hackathon_baywa_re, files: [T2_*.csv, "[HO]*.csv"], target: T2_data,
+     on_demand: true, scenarios: {lengths_h: [72], t0_step_h: 72}}
+  - {name: T3/tiled, kind: folder, path: data/data_hackathon_baywa_re, files: [T3_*.csv, "[HO]*.csv"], target: T3_data,
+     on_demand: true, scenarios: {lengths_h: [72], t0_step_h: 72}}
+
 # Extra leaderboard rows: a registered model with fixed params. Without the delay τ (M1 instead of M3), to show
 # what the lag search adds.
 variants:
-  linear_regression_nolag: {model: linear_regression, params: {lag_max_min: 0}}
+  linear_regression_nolag: {model: linear_regression, params: {lag_max_min: 0}, on_demand: true}
   # Without the factor per wind direction sector, to show what it adds where references carry a direction; on_demand:
   # only when named in --models (it adds a sixth of the run time).
   multi_regression_nowake: {model: multi_regression, params: {direction_sectors: 0}, on_demand: true}
+  # Candidates from harness/benchmarks/ with other sector counts.
+  sector_regression_4: {model: sector_regression, params: {direction_sectors: 4}, on_demand: true}
+  sector_regression_12: {model: sector_regression, params: {direction_sectors: 12}, on_demand: true}
+  mean_regression_nowake: {model: mean_regression, params: {direction_sectors: 0}, on_demand: true}

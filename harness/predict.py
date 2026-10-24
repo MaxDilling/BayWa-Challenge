@@ -25,7 +25,7 @@ def predict(target: Path, references: list[Path], power_curve: Path, n_turbines:
     sites = [site for name, text in file_texts(target) for site, _ in io.read_wind_csv(name, text)]
     if len(sites) != 1:
         raise io.CsvError(f"{target}: expected one wind column, found {', '.join(s.site_id for s in sites)}.")
-    tgt = sites[0].wind
+    tgt, weather = sites[0].wind, sites[0].extra
     ref_sites = [site for path in references for name, text in file_texts(path) for site, _ in io.read_wind_csv(name, text)]
     refs = [site.wind for site in ref_sites]
     [(_, curve_text)] = file_texts(power_curve)
@@ -35,8 +35,11 @@ def predict(target: Path, references: list[Path], power_curve: Path, n_turbines:
         span = f"{outage.start:%Y-%m-%d %H:%M} – {outage.end:%Y-%m-%d %H:%M} UTC"
         request = {
             "target": series_to_grid(tgt),
+            **({"targetTemperature": series_to_grid(weather["temperature"]),
+                "targetPressure": series_to_grid(weather["pressure"])}
+               if weather is not None and {"temperature", "pressure"} <= set(weather) else {}),
             "references": [{"id": s.site_id, "grid": series_to_grid(fill_during_outage(s.wind, outage)),
-                            **({"direction": series_to_grid(s.extra["direction"])} if s.extra is not None else {})}
+                            **({k: series_to_grid(s.extra[k]) for k in s.extra} if s.extra is not None else {})}
                            for s in ref_sites],
             "powerCurve": {"windMs": curve.wind_ms.tolist(), "powerKw": curve.power_kw.tolist(), "nTurbines": n_turbines},
             "outage": {"startMs": to_ms(outage.start), "endMs": to_ms(outage.end)},

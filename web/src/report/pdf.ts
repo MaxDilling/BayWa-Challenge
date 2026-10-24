@@ -10,11 +10,15 @@ import { fmtAmount, fmtDateTimeZone, fmtDuration, fmtNum, fmtSpanZone } from '@/
 import {
   ACCURACY,
   BAND_HINT,
+  compass,
+  densityText,
   farmText,
   KEYS,
   keyValue,
   rangeText,
   referenceRoles,
+  SECTOR_TEXT,
+  sectorWeights,
   toolText,
   trainingDays,
   verdict,
@@ -55,7 +59,7 @@ export const missing = ({ outage, failure }: Case) =>
   !outage ? 'No outage detected or selected' : failure !== undefined ? `Not calculated: ${failure}` : 'Still calculating'
 
 /** Shown with the references or the wake chart, not among the parameters. */
-const OWN_PLACE = /^(reference_index|(r|b|lag_min)_ref_\d+|wake_(factor|steps)_.+)$/
+const OWN_PLACE = /^(reference_index|(r|b|lag_min)_ref_\d+|wake_(factor|steps)_.+|sector_steps_.+|a_\d+|b_\d+_ref_\d+)$/
 const MM_PER_PT = 25.4 / 72
 const LEADING = 1.35
 const GAP = 6
@@ -346,7 +350,7 @@ function target(w: Writer, c: Required<Case>, input: ReportInput, chart: ChartTh
   w.y += 1
   const facts = [
     ['Turbines', farmText(dataset)],
-    ['Learned from', `${fmtNum(trainingDays(dataset, outage))} days of data before the outage`],
+    ['Learned from', `${fmtNum(trainingDays(dataset, outage))} days of target data outside the outage`],
     ['Power curve', `${c.curve}, rated ${fmtAmount(Math.max(...dataset.powerCurve.powerKw))} kW per turbine`],
     ['Method', input.method],
   ]
@@ -359,7 +363,8 @@ function target(w: Writer, c: Required<Case>, input: ReportInput, chart: ChartTh
       w.kpi(fmtAmount(energy.kwhP50), 'kWh')
       w.text('Lost energy, most likely value (P50)', { color: s.muted, gap: 2 })
       w.text(`The loss lies ${rangeText(energy)} (P10 to P90, the 10 % and 90 % quantiles).`, { bold: true, gap: 1 })
-      w.text(BAND_HINT, { color: s.muted })
+      w.text(BAND_HINT, { color: s.muted, gap: 1 })
+      w.text(densityText(energy), { color: s.muted })
     },
     () => {
       w.text('Expected energy (P50) lost since the start of the outage', { size: s.label, color: s.muted })
@@ -411,6 +416,22 @@ function target(w: Writer, c: Required<Case>, input: ReportInput, chart: ChartTh
     },
   )
 
+  const weights = sectorWeights(dataset.references, explanation)
+  if (weights.sectors.length)
+    w.keep(() => {
+      w.title('Weights by wind direction')
+      w.text(SECTOR_TEXT, { color: s.muted, gap: 1 })
+      const width = Math.min(22, (w.width - 44) / weights.references.length)
+      const cells = (texts: string[], color?: string) =>
+        texts.map((text, k) => ({ text, width: k === 0 ? 26 : k === 1 ? 18 : width, color, align: k ? ('right' as const) : undefined }))
+      w.row(cells(['Wind from', 'Values', 'a (m/s)', ...weights.references], s.muted), s.label)
+      for (const sector of weights.sectors)
+        w.row(
+          cells([`${compass(sector.deg)}${sector.own ? '' : ' · all'}`, fmtNum(sector.steps), fmtNum(sector.a, 2), ...sector.weights.map((b) => fmtNum(b, 3))]),
+          s.label,
+        )
+    })
+
   if (!sectors.length) return
   const wake = chartImage(wakeOption(sectors, chart), chart, chart.print.height)
   w.keep(() => {
@@ -424,11 +445,11 @@ function assumptions(w: Writer, input: ReportInput, tool?: string) {
   const items = [
     'All times are local time in Germany (Europe/Berlin, CET or CEST as marked); the CSV exports also carry UTC.',
     'The lost energy is the output of the power curve for the predicted wind, summed over the 10-minute steps of the outage (power × 1/6 h). ' +
-      'The curve is used as given: no correction for air density, and no availability, curtailment or electrical losses.',
+      'The curve is used as given apart from the air density stated for each target: no availability, curtailment or electrical losses.',
     'P10 and P90 are the 10 % and 90 % quantiles: with 80 % probability the loss lies between them; P50 is the central estimate. In wind ' +
       'resource assessments “P90” often names the conservative value exceeded with 90 % probability; here P90 is the high value.',
     BAND_HINT,
-    'The model learns only from data before the outage. The accuracy figures come from simulated outages of the same length on that data, before the real outage.',
+    'The model learns from the target data outside the outage, before and after it. The accuracy figures come from simulated outages of the same length before the real outage, each learned from the data on both sides of it.',
     `Data: ${input.files.length ? input.files.join(', ') : 'the wind series and power curve loaded in the tool'}` +
       (input.stations.length
         ? `; weather stations ${input.stations.join(', ')}: Deutscher Wetterdienst (DWD), opendata.dwd.de, 10-minute wind at about 10 m height, licensed under CC BY 4.0.`

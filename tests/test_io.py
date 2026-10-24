@@ -38,7 +38,7 @@ def test_csv_fixture(path: Path):
                     "negative": r.negative,
                     "ignoredColumns": r.ignored_columns,
                 },
-                **({"direction": series_to_grid(site.extra["direction"])} if site.extra is not None else {}),
+                **({k: series_to_grid(site.extra[k]) for k in site.extra} if site.extra is not None else {}),
             }
             for site, r in read_wind_csv(path.stem, text)
         ] == expected

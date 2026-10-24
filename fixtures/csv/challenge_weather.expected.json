@@ -1,0 +1,60 @@
+[
+  {
+    "id": "challenge_weather",
+    "grid": {
+      "t0": 1782856800000,
+      "stepS": 600,
+      "values": [
+        5.631282,
+        5.337009,
+        null,
+        6.1,
+        6.3
+      ]
+    },
+    "report": {
+      "rows": 5,
+      "measured": 4,
+      "missing": 1,
+      "negative": 0,
+      "ignoredColumns": [
+        "turbine_name",
+        "wind_speed_stddev",
+        "test_set"
+      ]
+    },
+    "direction": {
+      "t0": 1782856800000,
+      "stepS": 600,
+      "values": [
+        51.43747,
+        72.14201,
+        null,
+        80.5,
+        82.0
+      ]
+    },
+    "temperature": {
+      "t0": 1782856800000,
+      "stepS": 600,
+      "values": [
+        16.91814,
+        null,
+        null,
+        null,
+        17.2
+      ]
+    },
+    "pressure": {
+      "t0": 1782856800000,
+      "stepS": 600,
+      "values": [
+        993.5333,
+        993.5446,
+        null,
+        null,
+        994.1
+      ]
+    }
+  }
+]

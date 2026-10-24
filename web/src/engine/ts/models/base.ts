@@ -20,7 +20,7 @@ export interface Explanation {
   diagnostics: Record<string, number>
 }
 
-/** fit sees only data before the outage; predict uses refs and extra only, never the target. fit sets `errors`.
+/** fit sees the target only outside the outage (NaN inside); predict uses refs and extra only, never the target. fit sets `errors`.
  * extra: the references' wind directions in degrees, one column per reference (S3). */
 export interface WindModel {
   errors: Errors

@@ -57,6 +57,14 @@ NOT_WIND = re.compile(
 )
 DIRECTION = re.compile(r"dir|richt", re.I)
 NOT_DIRECTION = re.compile(r"std|sigma", re.I)
+TEMPERATURE = re.compile(r"temp", re.I)
+PRESSURE = re.compile(r"press|druck|hpa|mbar", re.I)
+# S1: column of the same series beside its wind → (header pattern, excluded pattern, valid range, name in errors)
+QUANTITIES = {
+    "direction": (DIRECTION, NOT_DIRECTION, (0, 360), "wind direction"),
+    "temperature": (TEMPERATURE, None, (-60, 60), "temperature"),
+    "pressure": (PRESSURE, None, (500, 1100), "air pressure"),
+}
 UTC_HEADER = re.compile(r"\b(utc|gmt)\b(?!\s*[+-])", re.I)
 CURVE_WIND = re.compile(r"wind|speed|geschw|m/s|^v\b|^ws\b", re.I)
 POWER = re.compile(r"power|leistung|kw|mw|^p\b", re.I)
@@ -260,18 +268,25 @@ def wind_sites(name: str, table: Table) -> list[tuple[Site, ImportReport]]:
 
     t0 = utc[0]
     n = (utc[-1] - t0) // STEP_MS + 1
-    directions = [i for i in others if header and DIRECTION.search(header[i]) and not NOT_DIRECTION.search(header[i])]
-    direction_col = directions[0] if len(wind_cols) == 1 and len(directions) == 1 else None
-    ignored = [header[i] for i in others if i not in wind_cols and i != direction_col] if header else []
-    direction = None
-    if direction_col is not None:
-        degrees: list[float | None] = [None] * n
-        for t, (line, cells) in zip(utc, rows):
-            v = parse_number(cells[direction_col])
-            if v is None:
-                raise CsvError(f'Line {line}: "{cells[direction_col]}" is not a wind direction.')
-            degrees[(t - t0) // STEP_MS] = v if 0 <= v <= 360 else None
-        direction = pd.DataFrame({"direction": grid_to_series({"t0": t0, "stepS": STEP_S, "values": degrees})})
+    extra_cols = {}
+    for key, (pattern, exclude, _, _) in QUANTITIES.items():
+        found = [i for i in others if header and pattern.search(header[i]) and not (exclude and exclude.search(header[i]))]
+        if len(wind_cols) == 1 and len(found) == 1:
+            extra_cols[key] = found[0]
+    ignored = [header[i] for i in others if i not in wind_cols and i not in extra_cols.values()] if header else []
+    extra = None
+    if extra_cols:
+        grids = {}
+        for key, col in extra_cols.items():
+            (low, high), what = QUANTITIES[key][2:]
+            values: list[float | None] = [None] * n
+            for t, (line, cells) in zip(utc, rows):
+                v = parse_number(cells[col])
+                if v is None:
+                    raise CsvError(f'Line {line}: "{cells[col]}" is not a {what}.')
+                values[(t - t0) // STEP_MS] = v if low <= v <= high else None
+            grids[key] = grid_to_series({"t0": t0, "stepS": STEP_S, "values": values})
+        extra = pd.DataFrame(grids)
     out = []
     for col in wind_cols:
         values: list[float | None] = [None] * n
@@ -285,7 +300,7 @@ def wind_sites(name: str, table: Table) -> list[tuple[Site, ImportReport]]:
         site_id = name if len(wind_cols) == 1 else (header[col] if header and header[col] else f"{name} column {col + 1}")
         measured = sum(v is not None for v in values)
         wind = grid_to_series({"t0": t0, "stepS": STEP_S, "values": values}, name=site_id)
-        out.append((Site(site_id, wind, direction), ImportReport(len(rows), measured, n - measured, negative, ignored)))
+        out.append((Site(site_id, wind, extra), ImportReport(len(rows), measured, n - measured, negative, ignored)))
     return out
 
 

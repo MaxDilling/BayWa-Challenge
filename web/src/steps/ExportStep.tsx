@@ -3,7 +3,7 @@ import { observer } from 'mobx-react-lite'
 import { useEffect, useState } from 'react'
 import { AnalysisState } from '@/components/AnalysisState'
 import { fmtDateTime, fmtDuration, fmtNum, fmtPct, HOUR, isoBerlin, STEP_MS, toLocalInput } from '@/components/format'
-import { BAND_HINT, farmText, headline, referenceText, toolText, trainingDays } from '@/components/metrics'
+import { BAND_HINT, densityText, farmText, headline, referenceText, toolText, trainingDays } from '@/components/metrics'
 import { Section } from '@/components/Section'
 import { Button } from '@/components/ui/button'
 import { Notice } from '@/components/Notice'
@@ -52,8 +52,8 @@ function emailDraft(dataset: Dataset, outage: Span, model: string, response: Ana
   const body = [
     'Dear Sir or Madam,',
     `we report an outage of wind farm ${target} (${farmText(dataset)}) from ${fmtDateTime(outage.startMs)} to ${fmtDateTime(outage.endMs)} (Europe/Berlin), ${fmtDuration(outage.endMs - outage.startMs)} in total.`,
-    `Estimated lost energy: ${headline(response.energy).replace('Most', 'most')} The range is the 10 % to 90 % quantile (P10 to P90). ${BAND_HINT}`,
-    `Method: the missing 10-minute wind speeds were predicted from ${referenceText(dataset.references, response.explanation)}, using the relationship learned from the ${fmtNum(trainingDays(dataset, outage))} days of data before the outage (${model}). The predicted wind was converted to energy with the turbine power curve, taking the uncertainty of each prediction into account.`,
+    `Estimated lost energy: ${headline(response.energy).replace('Most', 'most')} The range is the 10 % to 90 % quantile (P10 to P90). ${BAND_HINT} ${densityText(response.energy)}`,
+    `Method: the missing 10-minute wind speeds were predicted from ${referenceText(dataset.references, response.explanation)}, using the relationship learned from the ${fmtNum(trainingDays(dataset, outage))} days of target data outside the outage (${model}). The predicted wind was converted to energy with the turbine power curve, taking the uncertainty of each prediction into account.`,
     v.n_folds && accuracy.length
       ? `Accuracy: in ${fmtNum(v.n_folds)} simulated outages of the same length before the event, ${accuracy.join(', ')}.`
       : 'Accuracy: there was not enough data before the outage for a backtest.',

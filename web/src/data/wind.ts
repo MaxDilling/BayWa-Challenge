@@ -13,14 +13,21 @@ export interface WindSeries {
     negative: number
     ignoredColumns: string[]
   }
-  /** Wind direction in degrees on the same grid, when the file has one wind and one direction column. */
+  /** On the same grid, when the file has one wind column and one column of the quantity (SPEC.md S1): wind direction
+   * in degrees, temperature in °C, air pressure in hPa. */
   direction?: Grid
+  temperature?: Grid
+  pressure?: Grid
 }
 
 const WIND = /wind|speed|geschw|m\/s|\bws\b/i
 const NOT_WIND = /dir|richt|deg|°|temp|press|druck|hpa|mbar|humid|feucht|precip|nieder|power|leistung|rpm|status|flag|qual|gust|böe|max|std|sigma/i
-const DIRECTION = /dir|richt/i
-const NOT_DIRECTION = /std|sigma/i
+// S1: column of the same series beside its wind → header pattern, excluded pattern, valid range, name in errors
+const QUANTITIES = {
+  direction: { pattern: /dir|richt/i, exclude: /std|sigma/i, range: [0, 360], what: 'wind direction' },
+  temperature: { pattern: /temp/i, exclude: undefined, range: [-60, 60], what: 'temperature' },
+  pressure: { pattern: /press|druck|hpa|mbar/i, exclude: undefined, range: [500, 1100], what: 'air pressure' },
+} as const
 const UTC_HEADER = /\b(utc|gmt)\b(?!\s*[+-])/i
 const TIME_ONLY = /^\d{1,2}:\d{2}(:\d{2})?$/
 
@@ -65,10 +72,16 @@ export function windSeries(name: string, { header, rows }: Table): WindSeries[] 
 
   const t0 = utc[0]
   const n = (utc[utc.length - 1] - t0) / STEP_MS + 1
-  const directions = others.filter((i) => header && DIRECTION.test(header[i]) && !NOT_DIRECTION.test(header[i]))
-  const directionCol = windCols.length === 1 && directions.length === 1 ? directions[0] : undefined
-  const ignoredColumns = header ? others.filter((i) => !windCols.includes(i) && i !== directionCol).map((i) => header[i]) : []
-  const direction = directionCol === undefined ? undefined : directionGrid(rows, directionCol, utc, t0, n)
+  const extraCols = Object.entries(QUANTITIES).flatMap(([key, { pattern, exclude }]) => {
+    const found = others.filter((i) => header && pattern.test(header[i]) && !exclude?.test(header[i]))
+    return windCols.length === 1 && found.length === 1 ? [[key, found[0]] as const] : []
+  })
+  const ignoredColumns = header
+    ? others.filter((i) => !windCols.includes(i) && !extraCols.some(([, c]) => c === i)).map((i) => header[i])
+    : []
+  const extra = Object.fromEntries(
+    extraCols.map(([key, col]) => [key, quantityGrid(rows, col, utc, t0, n, QUANTITIES[key as keyof typeof QUANTITIES])]),
+  )
   return windCols.map((col) => {
     const values: (number | null)[] = Array(n).fill(null)
     let negative = 0
@@ -83,18 +96,25 @@ export function windSeries(name: string, { header, rows }: Table): WindSeries[] 
       id: windCols.length === 1 ? name : header?.[col] || `${name} column ${col + 1}`,
       grid: { t0, stepS: 600, values },
       report: { rows: rows.length, measured, missing: n - measured, negative, ignoredColumns },
-      ...(direction && { direction }),
+      ...extra,
     }
   })
 }
 
-/** Degrees on the grid; values outside 0–360 are missing, other text is an error. */
-function directionGrid(rows: Table['rows'], col: number, utc: number[], t0: number, n: number): Grid {
+/** The quantity on the grid; values outside its range are missing, other text is an error. */
+function quantityGrid(
+  rows: Table['rows'],
+  col: number,
+  utc: number[],
+  t0: number,
+  n: number,
+  { range: [low, high], what }: (typeof QUANTITIES)[keyof typeof QUANTITIES],
+): Grid {
   const values: (number | null)[] = Array(n).fill(null)
   rows.forEach(({ line, cells }, i) => {
     const v = parseNumber(cells[col])
-    if (v === undefined) throw new ImportError(`Line ${line}: "${cells[col]}" is not a wind direction.`)
-    values[(utc[i] - t0) / STEP_MS] = v !== null && v >= 0 && v <= 360 ? v : null
+    if (v === undefined) throw new ImportError(`Line ${line}: "${cells[col]}" is not a ${what}.`)
+    values[(utc[i] - t0) / STEP_MS] = v !== null && v >= low && v <= high ? v : null
   })
   return { t0, stepS: 600, values }
 }

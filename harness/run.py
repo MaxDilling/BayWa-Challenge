@@ -13,13 +13,17 @@ COLUMNS = ["wind_rmse", "wind_mae", "power_rmse", "power_mae", "energy_wape_pct"
            "bias", "coverage_80", "energy_coverage_80", "energy_band_pct", "score", "n"]
 
 
+def holdout_start(target: pd.Series, cfg: dict) -> pd.Timestamp:
+    """Start of the locked last `holdout_days` of the target."""
+    return target.last_valid_index() + STEP - pd.Timedelta(days=cfg["holdout_days"])
+
+
 def scenarios(target: pd.Series, cfg: dict, holdout: bool) -> list[tuple[pd.Timestamp, float]]:
-    """(t₀, length in hours) pairs. Without `holdout`, every window ends before the locked last `holdout_days`
-    and t₀ leaves at least `min_train_days`; with it, t₀ lies inside the holdout."""
-    first, end = target.first_valid_index(), target.last_valid_index() + STEP
-    holdout_start = end - pd.Timedelta(days=cfg["holdout_days"])
-    t0 = holdout_start if holdout else first + pd.Timedelta(days=cfg["min_train_days"])
-    stop = end if holdout else holdout_start
+    """(t₀, length in hours) pairs from the first target value on. Without `holdout`, every window ends before the
+    locked holdout; with it, t₀ lies inside the holdout."""
+    locked, end = holdout_start(target, cfg), target.last_valid_index() + STEP
+    t0 = locked if holdout else target.first_valid_index()
+    stop = end if holdout else locked
     out = []
     while t0 < stop:
         out += [(t0, h) for h in cfg["lengths_h"] if t0 + pd.Timedelta(hours=h) <= stop]
@@ -29,11 +33,14 @@ def scenarios(target: pd.Series, cfg: dict, holdout: bool) -> list[tuple[pd.Time
 
 def run(pairs: list[Pair], models: dict[str, tuple[str, dict]], cfg: dict, holdout: bool) -> tuple[pd.DataFrame, dict]:
     """One row per model × scenario, and per dataset the number of scenarios skipped because a reference has a gap
-    in the window that the import would not bridge either (fill_during_outage, as in the GUI and harness.predict)."""
+    in the window that the import would not bridge either (fill_during_outage, as in the GUI and harness.predict).
+    Without `holdout`, the fits never see the target inside the holdout."""
     rows, skipped = [], {}
     for pair in pairs:
         skipped[pair.name] = 0
-        for t0, hours in scenarios(pair.target, cfg | pair.scenarios, holdout):
+        settings = cfg | pair.scenarios
+        target = pair.target if holdout else pair.target.where(pair.target.index < holdout_start(pair.target, settings))
+        for t0, hours in scenarios(pair.target, settings, holdout):
             end = t0 + pd.Timedelta(hours=hours)
             try:
                 refs = pd.concat([fill_during_outage(pair.refs[c], Outage(t0, end)) for c in pair.refs], axis=1)
@@ -41,7 +48,7 @@ def run(pairs: list[Pair], models: dict[str, tuple[str, dict]], cfg: dict, holdo
                 skipped[pair.name] += 1
                 continue
             for label, (model, params) in models.items():
-                _, metrics = fold(model, params, pair.target, refs, pair.curve, t0, end, pair.extra)
+                _, metrics = fold(model, params, target, refs, pair.curve, t0, end, pair.extra)
                 if metrics:
                     rows.append({"model": label, "dataset": pair.name, "length_h": hours, "t0": t0, **metrics})
     return pd.DataFrame(rows), skipped

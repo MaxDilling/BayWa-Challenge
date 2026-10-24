@@ -3,6 +3,7 @@ import { addDisposer, flow, toGenerator, types } from 'mobx-state-tree'
 import {
   assignFiles,
   buildDataset,
+  DEMO_FILES,
   loadStations,
   plausibility,
   toRequest,
@@ -180,14 +181,6 @@ export const RootStore = types
     },
   }))
   .actions((self) => ({
-    loadDataset({ target, references, powerCurve, nTurbines }: Dataset) {
-      Object.assign(self, { files: [], stations: [], targetsChosen: false, powerCurve, nTurbines, turbinesConfirmed: true })
-      self.assignment = undefined
-      self.turbinesSource = undefined
-      self.powerCurveFile = undefined
-      self.uploadedCurve = undefined
-      self.setInputs({ targets: [target], references })
-    },
     /** Assign all dropped files again: targets the user chose stay while their series exist, else the assignment's. */
     reassign() {
       const assignment = self.files.length ? assignFiles(self.files) : undefined
@@ -211,6 +204,11 @@ export const RootStore = types
     },
     removeFile(name: string) {
       self.files = self.files.filter((f) => f.name !== name)
+      self.reassign()
+    },
+    /** The demo files instead of everything dropped before. */
+    loadDemo() {
+      Object.assign(self, { files: DEMO_FILES, stations: [], targetsChosen: false })
       self.reassign()
     },
     /** A series from the dropped files becomes a target, or a target becomes a reference again. */

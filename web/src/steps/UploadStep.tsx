@@ -10,7 +10,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { ImportError, KNOWN_CURVES, loadDemo, parsePowerCurveCsv, parseWindCsv, readFiles, turbineCount, type PowerCurve, type WindSeries } from '@/data'
+import { ImportError, KNOWN_CURVES, parsePowerCurveCsv, parseWindCsv, readFiles, turbineCount, type PowerCurve, type WindSeries } from '@/data'
 import { cn } from '@/lib/utils'
 import { ASK_TURBINES, store } from '@/state/store'
 
@@ -106,7 +106,7 @@ const AllFiles = observer(function AllFiles() {
     <Section
       title="All files at once"
       description="Drop the target(s), the reference(s) and the power curve, together or one after the other; CSV and Excel (.xlsx) both work. The power curve is the file without timestamps; targets are the series with an outage."
-      action={<Button onClick={() => store.loadDataset(loadDemo())}>Load demo data</Button>}
+      action={<Button onClick={() => store.loadDemo()}>Load demo data</Button>}
     >
       <FileDrop multiple onFiles={drop} className="gap-2 py-8 text-body">
         Drop files here (targets, references, power curve) or <span className="font-medium text-primary">browse</span>

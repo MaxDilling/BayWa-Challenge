@@ -1,7 +1,7 @@
 export { assignFiles, type Assignment } from './assign'
 export { ImportError } from './csv'
 export { buildDataset, MAX_REFERENCE_FILL_STEPS, toRequest, type Dataset } from './dataset'
-export { loadDemo } from './demo'
+export { DEMO_FILES } from './demo'
 export type { Span } from './outage'
 export { parsePowerCurveCsv, turbineCount, type PowerCurve } from './powerCurve'
 export { parseWindCsv, type WindSeries } from './wind'

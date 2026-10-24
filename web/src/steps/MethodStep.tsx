@@ -248,7 +248,7 @@ export function wakeOption(sectors: ReturnType<typeof wakeSectors>, t: ChartThem
     series: [
       {
         type: 'bar',
-        data: sectors.map((s) => ({ value: (s.factor - 1) * 100, itemStyle: { color: s.factor < 1 ? t.outage : t.reference } })),
+        data: sectors.map((s) => ({ value: (s.factor - 1) * 100, itemStyle: { color: s.factor < 1 ? t.outageEdge : t.reference } })),
       },
     ],
   }

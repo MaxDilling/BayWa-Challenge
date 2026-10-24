@@ -3,7 +3,7 @@ import { observer } from 'mobx-react-lite'
 import { useEffect, useState } from 'react'
 import { AnalysisState } from '@/components/AnalysisState'
 import { fmtAmount, fmtDateTime, fmtDuration, fmtNum, fmtPct, HOUR, isoBerlin, STEP_MS, toLocalInput } from '@/components/format'
-import { BAND_HINT, densityText, farmText, referenceText, toolText, trainingDays } from '@/components/metrics'
+import { densityText, farmText, referenceText } from '@/components/metrics'
 import { Section } from '@/components/Section'
 import { Button } from '@/components/ui/button'
 import { Notice } from '@/components/Notice'
@@ -52,22 +52,22 @@ function emailDraft(dataset: Dataset, outage: Span, model: string, response: Ana
   const subject = `Energy loss estimate – wind farm ${target} – outage of ${fmtDateTime(outage.startMs)}`
   const body = [
     'Dear Sir/Madam,',
-    `Please find below our estimate of the energy lost during the outage of wind farm ${target}. Attached are the report (PDF) with charts, method and accuracy, and the prediction as a CSV file with 10-minute values in Europe/Berlin and UTC time.`,
+    `Please find below our estimate of the energy lost during the outage of wind farm ${target}. Attached are the report (PDF) with charts, method and accuracy, and the prediction as a CSV file with 10-minute values in Berlin and UTC time.`,
     [
       'Outage',
       `• Wind farm: ${target} (${farmText(dataset)})`,
-      `• Period: ${fmtDateTime(outage.startMs)} – ${fmtDateTime(outage.endMs)} (Europe/Berlin)`,
+      `• Period: ${fmtDateTime(outage.startMs)} – ${fmtDateTime(outage.endMs)} (Berlin)`,
       `• Duration: ${fmtDuration(outage.endMs - outage.startMs)}`,
     ].join('\n'),
     [
       'Lost energy',
       `• Best estimate (P50): ${fmtAmount(kwhP50)} kWh`,
-      `• 80 % range (P10 – P90): ${fmtAmount(kwhP10)} – ${fmtAmount(kwhP90)} kWh`,
+      `• 80 % range (low / high estimate: 10 % / 90 % quantile): ${fmtAmount(kwhP10)} – ${fmtAmount(kwhP90)} kWh`,
       densityText(response.energy),
     ].join('\n'),
     [
       'Method',
-      `The missing 10-minute wind speeds were predicted from ${referenceText(dataset.references, response.explanation)}. The relationship between the farms was learned from the ${fmtNum(trainingDays(dataset, outage))} days of target data outside the outage (${model}). Each prediction, including its uncertainty, was converted to energy with the turbine power curve. ${BAND_HINT}`,
+      `The missing 10-minute wind speeds were predicted from ${referenceText(dataset.references, response.explanation)} using ${model}. Each prediction, including its uncertainty, was converted to energy with the turbine power curve.`,
     ].join('\n'),
     [
       'Validation',
@@ -77,7 +77,6 @@ function emailDraft(dataset: Dataset, outage: Span, model: string, response: Ana
     ].join('\n'),
     warnings.length > 0 && ['Data notes', ...warnings.map((w) => `• ${w.title}. ${w.detail}`)].join('\n'),
     'Kind regards',
-    `—\nCalculated with ${toolText(response)}`,
   ]
     .filter(Boolean)
     .join('\n\n')

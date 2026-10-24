@@ -101,7 +101,7 @@ function extent({ target, references }: Dataset): [number, number] {
 
 function timelineOption(dataset: Dataset, t: ChartTheme) {
   const refs = dataset.references
-  const areas = (spans: Span[], fill: string) => spans.map((s) => [{ xAxis: s.startMs, itemStyle: { color: fill } }, { xAxis: s.endMs }])
+  const areas = (spans: Span[], fill: string) => spans.map((s) => [{ xAxis: s.startMs, itemStyle: { color: fill, opacity: 0.6 } }, { xAxis: s.endMs }])
   return {
     legend: {},
     grid: { bottom: t.label * 4.5 },

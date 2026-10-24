@@ -149,7 +149,7 @@ export function windOption(dataset: Dataset, response: AnalyzeResponse, outage: 
         data: gridPoints(dataset.target.grid, from, to),
         lineStyle: { color: t.measured, width: t.lineThin },
         itemStyle: { color: t.measured },
-        markArea: { silent: true, itemStyle: { color: t.outage }, data: [[{ xAxis: outage.startMs }, { xAxis: outage.endMs }]] },
+        markArea: { silent: true, itemStyle: { color: t.outage, opacity: 0.6 }, data: [[{ xAxis: outage.startMs }, { xAxis: outage.endMs }]] },
       },
       ...refs.map((r, i) => ({
         id: `ref-${i}`,

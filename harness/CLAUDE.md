@@ -13,5 +13,5 @@ Läuft nur nativ und kommt nicht ins Wheel. Szenarien, Metriken und Ausgabeforma
 - `demo.py` schreibt die Demo-Daten der GUI (`make demo`) im Challenge-Format; die GUI liest sie über den normalen CSV-Import.
 - `predict.py` ist die Abgabe-CLI (`make predict TURBINES=n`): derselbe Weg wie die GUI (`windgap.core.io` → `windgap.core.outage` → `windgap.engine.handle`), keine eigene Modell- oder Formatlogik.
 - `synthetic.py` liefert Paare mit bekannter Wahrheit. Ändert sich der Generator, ändern sich Golden-Fixtures und Leaderboard; danach `make fixtures`.
-- `xlsx.py` (`make csv`) schreibt jede xlsx eines Ordners als CSV daneben, ohne Werte zu verändern: Datumszellen als Wanduhrzeit ohne Zeitzone, Zahlen exakt (kürzeste Darstellung des gespeicherten Werts), leere Zellen bleiben leer. Excel-Sperrdateien `~$…` werden übersprungen.
+- `xlsx.py` (`make csv`) schreibt jede xlsx eines Ordners als CSV in dessen Unterordner `csv/`, ohne Werte zu verändern: Datumszellen als Wanduhrzeit ohne Zeitzone, Zahlen exakt (kürzeste Darstellung des gespeicherten Werts), leere Zellen bleiben leer. Excel-Sperrdateien `~$…` werden übersprungen.
 - `dwd.py` lädt echte Stationspaare (`make dwd`) nach `data/dwd/`. Paare und Zeitfenster stehen fest im Code, damit jeder Download dieselben Daten liefert; nie Werte ergänzen oder glätten.

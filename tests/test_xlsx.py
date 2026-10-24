@@ -29,8 +29,8 @@ def test_xlsx_becomes_csv_with_wall_clock_times_and_empty_missing_values(tmp_pat
         for name, xml in PARTS.items():
             z.writestr(name, xml)
     (tmp_path / "~$T1_data.xlsx").write_bytes(b"Excel lock file")
-    assert convert(tmp_path) == [tmp_path / "T1_data.csv"]
-    assert (tmp_path / "T1_data.csv").read_text() == (
+    assert convert(tmp_path) == [tmp_path / "csv" / "T1_data.csv"]
+    assert (tmp_path / "csv" / "T1_data.csv").read_text() == (
         "turbine_name,timestamp,wind_speed,test_set\n"
         "T1,2026-07-01 00:10,,0\n"
         "T1,2026-07-01 00:20,4.865286,1\n"

@@ -4,18 +4,21 @@ import { analyze } from '@/engine/ts/tsEngine'
 import { assignFiles, buildDataset, filledTargetCsv, loadDemo, parsePowerCurveCsv, parseWindCsv, plausibility, toRequest, turbineCount } from '.'
 import { isSummerTime } from './berlin'
 import { detectOutages } from './outage'
+import { xlsxTexts } from './xlsx'
 
 const dir = new URL('../../../fixtures/csv/', import.meta.url)
 const cases = readdirSync(dir)
-  .filter((f) => f.endsWith('.csv'))
+  .filter((f) => /\.(csv|xlsx)$/.test(f))
   .map((f) => ({
-    name: f.replace('.csv', ''),
-    csv: readFileSync(new URL(f, dir), 'utf8'),
-    expected: JSON.parse(readFileSync(new URL(f.replace('.csv', '.expected.json'), dir), 'utf8')),
+    file: f,
+    name: f.replace(/\.\w+$/, ''),
+    expected: JSON.parse(readFileSync(new URL(f.replace(/\.\w+$/, '.expected.json'), dir), 'utf8')),
   }))
 
-describe.each(cases)('fixtures/csv/$name', ({ name, csv, expected }) => {
-  it('parses as expected', () => {
+describe.each(cases)('fixtures/csv/$file', ({ file, name, expected }) => {
+  it('parses as expected', async () => {
+    const bytes = readFileSync(new URL(file, dir))
+    const [[, csv]] = file.endsWith('.xlsx') ? await xlsxTexts(name, new Uint8Array(bytes).buffer) : [[name, bytes.toString('utf8')]]
     const parse = () => (name.startsWith('curve_') ? parsePowerCurveCsv(csv) : parseWindCsv(name, csv))
     if (expected.error) return expect(parse).toThrow(expected.error)
     expect(parse()).toEqual(expected)
@@ -101,25 +104,25 @@ describe('file assignment', () => {
     const a = assignFiles([file('ref.csv', [1, 1, 1, 1, 1, 1]), curve, file('target.csv', [1, null, null, null, 1, 1])])
     expect(a.series.map((s) => s.id)).toEqual(['ref', 'target'])
     expect(a.targetCandidates).toEqual(['target'])
-    expect(a.target).toBe('target')
+    expect(a.targets).toEqual(['target'])
     expect(a.powerCurve).toEqual({ windMs: [3, 12], powerKw: [0, 3000] })
     expect(a.errors).toEqual([])
   })
 
-  it('splits a file with several turbines and ranks candidates by their longest outage', () => {
+  it('splits a file with several turbines and takes every outage of comparable length as a target', () => {
     const text = 'Timestamp;WTG01;WTG02;Temperature\n' + ['5;5;9', '-;5;9', '-;-;9', '-;-;9', '-;-;9', '5;-;9', '5;-;9', '5;5;9']
       .map((r, i) => `${new Date(T0 + i * 600_000).toISOString()};${r}`).join('\n')
     const a = assignFiles([{ name: 'park.csv', text }, file('ref', [1, 1, 1, 1, 1, 1, 1, 1])])
     expect(a.series.map((s) => s.id)).toEqual(['WTG01', 'WTG02', 'ref'])
     expect(a.targetCandidates).toEqual(['WTG02', 'WTG01'])
-    expect(a.target).toBeUndefined()
+    expect(a.targets).toEqual(['WTG02', 'WTG01'])
     expect(a.powerCurve).toBeUndefined()
   })
 
-  it('takes the longest outage as the target when it is at least twice as long as any other', () => {
+  it('leaves a series whose longest outage is at most half the longest as a reference', () => {
     const a = assignFiles([file('ref', [1, 1, 1, 1, 1, 1, 1, null, null, null]), file('target', [1, null, null, null, null, null, null, 1, 1, 1])])
     expect(a.targetCandidates).toEqual(['target', 'ref'])
-    expect(a.target).toBe('target')
+    expect(a.targets).toEqual(['target'])
   })
 
   it('treats a target file that ends early as having an outage', () => {

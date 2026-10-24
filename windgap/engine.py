@@ -11,7 +11,7 @@ import pandas as pd
 import windgap
 from windgap.backtest import MIN_TRAIN_STEPS, backtest, predict_window
 from windgap.core.energy import energy_loss, expected_power
-from windgap.core.grid import align, from_ms, grid_to_series, to_ms
+from windgap.core.grid import align, directions, from_ms, grid_to_series, to_ms
 from windgap.core.schema import STEP, STEP_S, Outage, PowerCurve
 from windgap.models import registry
 
@@ -31,6 +31,8 @@ def analyze(req: dict) -> dict:
     df = align([grid_to_series(req["target"]), *(grid_to_series(r["grid"]) for r in req["references"])])
     df.columns = ["target", *(r["id"] for r in req["references"])]
     target, refs = df.iloc[:, 0], df.iloc[:, 1:]
+    extra = directions([grid_to_series(r["direction"]) if r.get("direction") else None for r in req["references"]],
+                       df.index)
     curve = PowerCurve(
         wind_ms=np.asarray(req["powerCurve"]["windMs"], dtype=float),
         power_kw=np.asarray(req["powerCurve"]["powerKw"], dtype=float),
@@ -47,8 +49,9 @@ def analyze(req: dict) -> dict:
     if (n_train := int(target[train].notna().sum())) < MIN_TRAIN_STEPS:
         raise ValueError(f"The target has {n_train} values before the outage; at least {MIN_TRAIN_STEPS} "
                          "(one day) are needed to learn from.")
-    model = registry.create(name, **params).fit(target[train], refs[train])
-    pred = predict_window(model, refs, outage.start, outage.end)
+    extra_train = None if extra is None else extra[train]
+    model = registry.create(name, **params).fit(target[train], refs[train], extra_train)
+    pred = predict_window(model, refs, outage.start, outage.end, extra)
     energy = energy_loss(expected_power(pred, curve), outage, model.errors.acf)
     explanation = model.explain()
 
@@ -60,7 +63,7 @@ def analyze(req: dict) -> dict:
             "q10": _floats(pred["q10"]),
             "q90": _floats(pred["q90"]),
         },
-        "validation": _finite(backtest(name, params, target[train], refs[train], curve, len(outage_index))),
+        "validation": _finite(backtest(name, params, target[train], refs[train], curve, len(outage_index), extra_train)),
         "explanation": {
             "summary": explanation.summary,
             "formula": explanation.formula,
@@ -73,12 +76,12 @@ def analyze(req: dict) -> dict:
             "kwhP90": energy.kwh_p90,
             "cumulativeKwh": _floats(energy.cumulative),
         },
-        "scatter": _scatter(target[train], refs[train], model, explanation.diagnostics),
+        "scatter": _scatter(target[train], refs[train], extra_train, model, explanation.diagnostics),
         "engine": {"id": "py", "version": windgap.__version__, "ms": (time.perf_counter() - started) * 1000},
     }
 
 
-def _scatter(target: pd.Series, refs: pd.DataFrame, model, diagnostics: dict) -> dict:
+def _scatter(target: pd.Series, refs: pd.DataFrame, extra: pd.DataFrame | None, model, diagnostics: dict) -> dict:
     """Training pairs as the model sees them: target(t) against the chosen reference (`reference_index`, else the only
     one) at t − τ (τ = lag_min), evenly
     thinned to MAX_SCATTER. The fit line is the in-sample prediction averaged per 1 m/s bin of that shifted reference:
@@ -87,7 +90,7 @@ def _scatter(target: pd.Series, refs: pd.DataFrame, model, diagnostics: dict) ->
     pairs = pd.DataFrame({"ref": ref, "target": target}).dropna()
     k = min(len(pairs), MAX_SCATTER)
     shown = pairs.iloc[(np.arange(k) * len(pairs)) // k] if k else pairs
-    line = pd.DataFrame({"ref": ref, "pred": model.predict(refs)["mean"]}).dropna()
+    line = pd.DataFrame({"ref": ref, "pred": model.predict(refs, extra)["mean"]}).dropna()
     bins = line.groupby(np.floor(line["ref"])).mean()
     return {
         "ref": _floats(shown["ref"]),

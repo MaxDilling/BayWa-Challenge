@@ -13,7 +13,7 @@ export class Identity implements WindModel {
     ;[this.ref, , this.r, this.rRefs] = pickReference(refs, target, 0)
     const x = refs.cols[this.ref]
     this.nTrain = pairs(target, x)[0].length
-    this.errors = calibrate(x, target, () => (v) => v)
+    this.errors = calibrate([x], target, () => ([v]) => v)
     return this
   }
 

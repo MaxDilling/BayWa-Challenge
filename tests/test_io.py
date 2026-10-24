@@ -6,13 +6,18 @@ import pytest
 
 from windgap.core.grid import series_to_grid
 from windgap.core.io import CsvError, read_power_curve_csv, read_wind_csv
+from windgap.core.xlsx import xlsx_texts
 
-CASES = sorted((Path(__file__).resolve().parent.parent / "fixtures" / "csv").glob("*.csv"))
+FIXTURES = Path(__file__).resolve().parent.parent / "fixtures" / "csv"
+CASES = sorted([*FIXTURES.glob("*.csv"), *FIXTURES.glob("*.xlsx")])
 
 
-@pytest.mark.parametrize("path", CASES, ids=lambda p: p.stem)
+@pytest.mark.parametrize("path", CASES, ids=lambda p: p.name)
 def test_csv_fixture(path: Path):
-    text = path.read_text(encoding="utf-8")
+    if path.suffix == ".xlsx":
+        [(_, text)] = xlsx_texts(path.stem, path.read_bytes())
+    else:
+        text = path.read_text(encoding="utf-8")
     expected = json.loads(path.with_name(f"{path.stem}.expected.json").read_text(encoding="utf-8"))
     curve = path.stem.startswith("curve_")
     if isinstance(expected, dict) and "error" in expected:
@@ -33,6 +38,7 @@ def test_csv_fixture(path: Path):
                     "negative": r.negative,
                     "ignoredColumns": r.ignored_columns,
                 },
+                **({"direction": series_to_grid(site.extra["direction"])} if site.extra is not None else {}),
             }
             for site, r in read_wind_csv(path.stem, text)
         ] == expected

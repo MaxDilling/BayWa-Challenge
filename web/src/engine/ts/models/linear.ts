@@ -27,9 +27,9 @@ abstract class Linear implements WindModel {
     const [px, py] = pairs(x, y)
     ;[this.a, this.b] = this.coefficients(Float64Array.from(px), Float64Array.from(py))
     this.nTrain = px.length
-    this.errors = calibrate(x, y, (tx, ty) => {
+    this.errors = calibrate([x], y, ([tx], ty) => {
       const [a, b] = this.coefficients(tx, ty)
-      return (v) => v.map((vi) => a + b * vi)
+      return ([v]) => v.map((vi) => a + b * vi)
     })
     return this
   }

@@ -1,0 +1,27 @@
+# AN Bonus 1000/54 · 1000 kW · stall-regulated · cut-out 25 m/s
+# Source: https://media.mwps.world/static/2020/10/an-bonus-1000_54-technical-documentation.pdf (retrieved 2026-10-24)
+wind_speed_ms,power_kw
+2,0
+3,2.9
+4,23.5
+5,68.4
+6,127.5
+7,210.3
+8,321
+9,453
+10,597
+11,730.1
+12,834.5
+13,917.5
+14,971
+15,991
+16,1000
+17,1000
+18,1000
+19,1000
+20,1000
+21,1000
+22,1000
+23,1000
+24,1000
+25,1000

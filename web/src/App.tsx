@@ -45,7 +45,8 @@ const STEP_INFO: Record<Step, { label: string; sentence?: string; View: () => Re
 /** One line per step in the stepper: what has been decided there so far. */
 function stepStatus(step: Step): string {
   const { dataset, outage, model, response, status } = store
-  if (step === 'upload') return dataset ? `${1 + dataset.references.length} series · power curve` : 'Add files'
+  if (step === 'upload')
+    return dataset ? `${store.targets.length} target${store.targets.length === 1 ? '' : 's'} · ${dataset.references.length} references` : 'Add files'
   if (!dataset) return '—'
   if (step === 'outage') return outage ? fmtDuration(outage.endMs - outage.startMs) : 'Select a period'
   if (step === 'method') return store.label(model)
@@ -103,6 +104,32 @@ const Stepper = observer(function Stepper() {
   )
 })
 
+/** Several targets: steps 2–5 show one; each button carries that target's lost energy with the selected model. */
+const TargetSwitch = observer(function TargetSwitch() {
+  const { targets, target, resultsByTarget, model } = store
+  return (
+    <div className="flex flex-wrap items-center gap-2" role="radiogroup" aria-label="Target">
+      <span className="text-label text-muted-foreground">Target</span>
+      {targets.map((t) => {
+        const response = resultsByTarget[t.id]?.[model]
+        return (
+          <Button
+            key={t.id}
+            size="sm"
+            role="radio"
+            aria-checked={t === target}
+            variant={t === target ? 'default' : 'outline'}
+            onClick={() => store.selectTarget(t.id)}
+          >
+            {t.id}
+            <span className="tabular-nums opacity-80">{response ? `${fmtAmount(response.energy.kwhP50)} kWh` : '…'}</span>
+          </Button>
+        )
+      })}
+    </div>
+  )
+})
+
 export default observer(function App() {
   const index = STEPS.indexOf(store.step)
   const { label, sentence, View } = STEP_INFO[store.step]
@@ -127,6 +154,7 @@ export default observer(function App() {
         </header>
         <main className="mx-auto flex w-full max-w-page flex-1 flex-col gap-section px-section py-section">
           <Stepper />
+          {store.step !== 'upload' && store.targets.length > 1 && <TargetSwitch />}
           <div>
             <h2 className="text-heading font-semibold">
               {index + 1}. {label}

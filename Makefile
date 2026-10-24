@@ -1,4 +1,4 @@
-.PHONY: install dev test fixtures demo harness predict dwd csv wheel pyodide build serve screenshots robustness
+.PHONY: install dev test fixtures demo harness predict dwd dwd-refs csv wheel pyodide build serve screenshots annotated robustness
 
 install:
 	uv sync
@@ -38,6 +38,10 @@ predict:
 dwd:
 	uv run python -m harness.dwd
 
+# data/dwd_refs/: DWD stations around the challenge farms, Jul–Sep 2026, extra references for app and harness (checked in)
+dwd-refs:
+	uv run python -m harness.dwd refs
+
 # <name>.csv next to every .xlsx in XLSX (default: the challenge data), readable by the import
 XLSX ?= data/data_hackathon_baywa_re
 csv:
@@ -63,10 +67,14 @@ build: wheel pyodide
 serve: build
 	cd dist/windgap-web && python3 -m http.server 8000
 
-# screenshots/: every GUI step on desktop, mobile and dark, an upload error and the py engine
+# screenshots/v<n>/ (next n): every GUI step on desktop, mobile and dark, an upload error and the py engine
 screenshots: build
 	npx --prefix web playwright install --only-shell chromium
 	node web/scripts/screenshots.mjs
+
+# Screenshots the team drew on since they were taken, per version
+annotated:
+	node web/scripts/annotated.mjs
 
 # Realistic uploads (DWD pair, German format, multi-column farm, one year) on both engines, with timings
 robustness: build

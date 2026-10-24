@@ -1,0 +1,33 @@
+[
+  {
+    "id": "xlsx_challenge_layout",
+    "grid": {
+      "t0": 1782857400000,
+      "stepS": 600,
+      "values": [
+        null,
+        4.865286,
+        3.804249
+      ]
+    },
+    "report": {
+      "rows": 3,
+      "measured": 2,
+      "missing": 1,
+      "negative": 0,
+      "ignoredColumns": [
+        "turbine_name",
+        "test_set"
+      ]
+    },
+    "direction": {
+      "t0": 1782857400000,
+      "stepS": 600,
+      "values": [
+        124.9424,
+        null,
+        119.1656
+      ]
+    }
+  }
+]

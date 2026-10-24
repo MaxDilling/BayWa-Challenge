@@ -20,11 +20,12 @@ export interface Explanation {
   diagnostics: Record<string, number>
 }
 
-/** fit sees only data before the outage; predict uses refs only, never the target. fit sets `errors`. */
+/** fit sees only data before the outage; predict uses refs and extra only, never the target. fit sets `errors`.
+ * extra: the references' wind directions in degrees, one column per reference (S3). */
 export interface WindModel {
   errors: Errors
-  fit(target: Float64Array, refs: Frame): WindModel
-  predict(refs: Frame): Prediction
+  fit(target: Float64Array, refs: Frame, extra?: Frame): WindModel
+  predict(refs: Frame, extra?: Frame): Prediction
   explain(): Explanation
 }
 
@@ -49,12 +50,14 @@ export class Errors {
   }
 }
 
-export type Fit = (x: Float64Array, y: Float64Array) => (x: Float64Array) => Float64Array
+/** Inputs as one array per column, rows aligned with y. */
+export type Fit = (x: Float64Array[], y: Float64Array) => (x: Float64Array[]) => Float64Array
 
-/** Leave-one-block-out: the measured pairs are cut into N_BLOCKS contiguous blocks of equal count; each block is
- * predicted by `fit` on the other blocks. */
-export function calibrate(x: Float64Array, y: Float64Array, fit: Fit): Errors {
-  const measured = [...x.keys()].filter((i) => !Number.isNaN(x[i]) && !Number.isNaN(y[i]))
+/** Leave-one-block-out: the measured rows (every input and y present) are cut into N_BLOCKS contiguous blocks of equal
+ * count; each block is predicted by `fit` on the other blocks. */
+export function calibrate(x: Float64Array[], y: Float64Array, fit: Fit): Errors {
+  const measured = [...y.keys()].filter((i) => !Number.isNaN(y[i]) && x.every((c) => !Number.isNaN(c[i])))
+  const take = (idx: number[]) => x.map((c) => Float64Array.from(idx, (i) => c[i]))
   const n = measured.length
   const pred = new Float64Array(y.length).fill(NaN)
   let start = 0
@@ -62,8 +65,8 @@ export function calibrate(x: Float64Array, y: Float64Array, fit: Fit): Errors {
     const end = start + Math.floor(n / N_BLOCKS) + (b < n % N_BLOCKS ? 1 : 0)
     const train = [...measured.slice(0, start), ...measured.slice(end)]
     const block = measured.slice(start, end)
-    const line = fit(Float64Array.from(train, (i) => x[i]), Float64Array.from(train, (i) => y[i]))
-    line(Float64Array.from(block, (i) => x[i])).forEach((p, k) => (pred[block[k]] = p))
+    const line = fit(take(train), Float64Array.from(train, (i) => y[i]))
+    line(take(block)).forEach((p, k) => (pred[block[k]] = p))
     start = end
   }
   const err = pred.map((p, i) => p - y[i])
@@ -130,15 +133,21 @@ export function gaussianPrediction(mean: Float64Array, std: Float64Array): Predi
 export function pickReference(refs: Frame, y: Float64Array, lagMax: number): [number, number, number, number[]] {
   let best: [number, number, number] = [0, 0, -Infinity]
   const rs = refs.cols.map((x, col) => {
-    let [r, lag] = [-Infinity, 0]
-    for (let l = -lagMax; l <= lagMax; l++) {
-      const c = correlation(...laggedPairs(x, y, l))
-      if (c >= r) [r, lag] = [c, l]
-    }
+    const [r, lag] = bestLag(x, y, lagMax)
     if (r > best[2]) best = [col, lag, r]
     return r
   })
   return [...best, rs]
+}
+
+/** [r, τ] at the delay |τ| ≤ lagMax steps where x(t − τ) correlates best with y(t). */
+export function bestLag(x: Float64Array, y: Float64Array, lagMax: number): [number, number] {
+  let [r, lag] = [-Infinity, 0]
+  for (let l = -lagMax; l <= lagMax; l++) {
+    const c = correlation(...laggedPairs(x, y, l))
+    if (c >= r) [r, lag] = [c, l]
+  }
+  return [r, lag]
 }
 
 /** Which reference the model uses and how well each tracked the target; only when there was a choice. */

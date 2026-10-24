@@ -1,5 +1,5 @@
 // windgap/engine.py, ported for the models in ./models/registry.ts.
-import type { AnalyzeRequest, AnalyzeResponse, Engine } from '../contract'
+import type { AnalyzeRequest, AnalyzeResponse, Engine, Grid } from '../contract'
 import { backtest, MIN_TRAIN_STEPS, predictWindow } from './backtest'
 import { energyLoss, expectedPower } from './energy'
 import { align, pairs, rows, STEP_MS, type Frame } from './frame'
@@ -13,6 +13,7 @@ export function analyze(req: AnalyzeRequest): AnalyzeResponse {
   const all = align([req.target, ...req.references.map((r) => r.grid)])
   const [target] = all.cols
   const refs: Frame = { t0: all.t0, cols: all.cols.slice(1) }
+  const extra = directions(req, all)
   const { startMs, endMs } = req.outage
   const start = (startMs - all.t0) / STEP_MS
   const end = start + (endMs - startMs) / STEP_MS
@@ -27,31 +28,41 @@ export function analyze(req: AnalyzeRequest): AnalyzeResponse {
   const nTrain = trainTarget.filter((v) => !Number.isNaN(v)).length
   if (nTrain < MIN_TRAIN_STEPS)
     throw new Error(`The target has ${nTrain} values before the outage; at least ${MIN_TRAIN_STEPS} (one day) are needed to learn from.`)
-  const model = create(req.model, params).fit(trainTarget, trainRefs)
-  const pred = predictWindow(model, refs, start, end)
+  const trainExtra = extra && rows(extra, 0, train)
+  const model = create(req.model, params).fit(trainTarget, trainRefs, trainExtra)
+  const pred = predictWindow(model, refs, start, end, extra)
   const energy = energyLoss(expectedPower(pred, req.powerCurve), model.errors.acf)
   const explanation = model.explain()
 
   return {
     prediction: { t0: startMs, stepS: 600, mean: [...pred.mean], q10: [...pred.q10], q90: [...pred.q90] },
-    validation: finite(backtest(req.model, params, trainTarget, trainRefs, req.powerCurve, refsOut.cols[0].length)),
+    validation: finite(backtest(req.model, params, trainTarget, trainRefs, req.powerCurve, refsOut.cols[0].length, trainExtra)),
     explanation: { ...explanation, params: finite(explanation.params), diagnostics: finite(explanation.diagnostics) },
     energy,
-    scatter: scatter(trainTarget, trainRefs, model, explanation.diagnostics),
+    scatter: scatter(trainTarget, trainRefs, trainExtra, model, explanation.diagnostics),
     engine: { id: 'ts', version: __WINDGAP_VERSION__, ms: performance.now() - started },
   }
 }
 
+/** windgap.core.grid.directions: each reference's wind direction on the frame's grid, NaN where unknown; undefined
+ * when no reference has a direction. */
+function directions(req: AnalyzeRequest, frame: Frame): Frame | undefined {
+  if (!req.references.some((r) => r.direction)) return undefined
+  const column = (g?: Grid) =>
+    Float64Array.from({ length: frame.cols[0].length }, (_, i) => g?.values[(frame.t0 - g.t0) / STEP_MS + i] ?? NaN)
+  return { t0: frame.t0, cols: req.references.map((r) => column(r.direction)) }
+}
+
 /** Training pairs as the model sees them: target(t) against the chosen reference at t − τ, evenly thinned; fit line =
  * in-sample prediction per 1 m/s bin of that shifted reference. */
-function scatter(target: Float64Array, refs: Frame, model: WindModel, diagnostics: Record<string, number>): AnalyzeResponse['scatter'] {
+function scatter(target: Float64Array, refs: Frame, extra: Frame | undefined, model: WindModel, diagnostics: Record<string, number>): AnalyzeResponse['scatter'] {
   const lag = Math.round((diagnostics.lag_min ?? 0) / 10)
   const chosen = refs.cols[diagnostics.reference_index ?? 0]
   const shifted = chosen.map((_, i) => chosen[i - lag] ?? NaN)
   const [ref, tgt] = pairs(shifted, target)
   const k = Math.min(ref.length, MAX_SCATTER)
   const shown = Array.from({ length: k }, (_, i) => Math.floor((i * ref.length) / k))
-  const [lineRef, linePred] = pairs(shifted, model.predict(refs).mean)
+  const [lineRef, linePred] = pairs(shifted, model.predict(refs, extra).mean)
   const bins = new Map<number, [number, number, number]>()
   lineRef.forEach((r, i) => {
     const b = bins.get(Math.floor(r)) ?? [0, 0, 0]

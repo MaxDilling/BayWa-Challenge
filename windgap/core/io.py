@@ -10,6 +10,7 @@ from functools import cache
 from time import gmtime, strftime
 
 import numpy as np
+import pandas as pd
 
 from windgap.core.grid import grid_to_series
 from windgap.core.schema import STEP_S, PowerCurve, Site
@@ -54,6 +55,8 @@ NOT_WIND = re.compile(
     r"dir|richt|deg|°|temp|press|druck|hpa|mbar|humid|feucht|precip|nieder|power|leistung|rpm|status|flag|qual|gust|böe|max|std|sigma",
     re.I,
 )
+DIRECTION = re.compile(r"dir|richt", re.I)
+NOT_DIRECTION = re.compile(r"std|sigma", re.I)
 UTC_HEADER = re.compile(r"\b(utc|gmt)\b(?!\s*[+-])", re.I)
 CURVE_WIND = re.compile(r"wind|speed|geschw|m/s|^v\b|^ws\b", re.I)
 POWER = re.compile(r"power|leistung|kw|mw|^p\b", re.I)
@@ -257,7 +260,18 @@ def wind_sites(name: str, table: Table) -> list[tuple[Site, ImportReport]]:
 
     t0 = utc[0]
     n = (utc[-1] - t0) // STEP_MS + 1
-    ignored = [header[i] for i in others if i not in wind_cols] if header else []
+    directions = [i for i in others if header and DIRECTION.search(header[i]) and not NOT_DIRECTION.search(header[i])]
+    direction_col = directions[0] if len(wind_cols) == 1 and len(directions) == 1 else None
+    ignored = [header[i] for i in others if i not in wind_cols and i != direction_col] if header else []
+    direction = None
+    if direction_col is not None:
+        degrees: list[float | None] = [None] * n
+        for t, (line, cells) in zip(utc, rows):
+            v = parse_number(cells[direction_col])
+            if v is None:
+                raise CsvError(f'Line {line}: "{cells[direction_col]}" is not a wind direction.')
+            degrees[(t - t0) // STEP_MS] = v if 0 <= v <= 360 else None
+        direction = pd.DataFrame({"direction": grid_to_series({"t0": t0, "stepS": STEP_S, "values": degrees})})
     out = []
     for col in wind_cols:
         values: list[float | None] = [None] * n
@@ -271,7 +285,7 @@ def wind_sites(name: str, table: Table) -> list[tuple[Site, ImportReport]]:
         site_id = name if len(wind_cols) == 1 else (header[col] if header and header[col] else f"{name} column {col + 1}")
         measured = sum(v is not None for v in values)
         wind = grid_to_series({"t0": t0, "stepS": STEP_S, "values": values}, name=site_id)
-        out.append((Site(site_id, wind), ImportReport(len(rows), measured, n - measured, negative, ignored)))
+        out.append((Site(site_id, wind, direction), ImportReport(len(rows), measured, n - measured, negative, ignored)))
     return out
 
 

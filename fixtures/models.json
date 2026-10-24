@@ -12,6 +12,12 @@
     "recommended": true
   },
   {
+    "name": "multi_regression",
+    "label": "Multiple regression (MCP)",
+    "tagline": "Least-squares weights over all reference farms, each shifted by its own delay.",
+    "recommended": false
+  },
+  {
     "name": "variance_ratio",
     "label": "Variance ratio (MCP)",
     "tagline": "Line that keeps the target's mean and spread, shifted by the delay between the farms.",

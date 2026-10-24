@@ -47,13 +47,15 @@ const KEYS: Record<string, { label: string; unit?: string; digits: number; hint:
 }
 
 const COMPARED = [METRICS.energy_wape_pct, METRICS.wind_rmse, METRICS.coverage_80]
-/** Diagnostics of the reference choice, shown in their own card. */
-const CHOICE = /^(reference_index|r_ref_\d+)$/
+/** Reference choice and wake factors, shown in their own cards. */
+const OWN_CARD = /^(reference_index|r_ref_\d+|wake_(factor|steps)_.+)$/
+const COMPASS = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE', 'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW']
+const compass = (deg: number) => `${COMPASS[Math.round(deg / 22.5) % 16]} ${fmtNum(deg)}°`
 
 /** Bonus 3: the model picks the reference that tracked the target best before the outage; this card shows why. */
 const ReferenceChoice = observer(function ReferenceChoice({ response }: { response: AnalyzeResponse }) {
   const d = response.explanation.diagnostics
-  const ranked = store.references
+  const ranked = store.dataset!.references
     .map((ref, i) => ({ id: ref.id, r: d[`r_ref_${i}`], used: i === d.reference_index }))
     .sort((a, b) => (b.r ?? -1) - (a.r ?? -1))
   const used = ranked.find((x) => x.used)!
@@ -97,6 +99,7 @@ export const MethodStep = observer(function MethodStep() {
           {response.explanation.diagnostics.reference_index !== undefined && <ReferenceChoice response={response} />}
           <Explanation response={response} />
           <ScatterCard response={response} />
+          {wakeSectors(response).length > 0 && <WakeCard response={response} />}
         </>
       ) : (
         <div className="lg:col-span-12">
@@ -179,7 +182,7 @@ function ModelRow({ info, selected, response, failure }: { info: ModelInfo; sele
 
 function Explanation({ response }: { response: AnalyzeResponse }) {
   const { formula, summary, params, diagnostics } = response.explanation
-  const rows = Object.entries({ ...params, ...diagnostics }).filter(([key]) => !CHOICE.test(key))
+  const rows = Object.entries({ ...params, ...diagnostics }).filter(([key]) => !OWN_CARD.test(key))
   return (
     <Section title={store.label(store.model)} className="lg:col-span-4">
       <Formula tex={formula} />
@@ -263,6 +266,63 @@ function ScatterCard({ response }: { response: AnalyzeResponse }) {
       className="lg:col-span-8"
     >
       <Chart option={option} className="h-chart" />
+    </Section>
+  )
+}
+
+/** The factor per wind direction sector (multi_regression): what the references cannot see, such as a neighbour's wake. */
+function wakeSectors({ explanation: { params, diagnostics } }: AnalyzeResponse) {
+  return Object.keys(params)
+    .filter((k) => k.startsWith('wake_factor_'))
+    .map((k) => {
+      const deg = Number(k.slice('wake_factor_'.length))
+      return { deg, factor: params[k], steps: diagnostics[`wake_steps_${k.slice('wake_factor_'.length)}`] }
+    })
+    .sort((a, b) => a.deg - b.deg)
+}
+
+function wakeOption(sectors: ReturnType<typeof wakeSectors>, t: ChartTheme) {
+  return {
+    grid: { left: t.label * 2.5, bottom: t.label * 2 },
+    tooltip: {
+      trigger: 'axis',
+      formatter: ([{ dataIndex }]: { dataIndex: number }[]) => {
+        const { deg, factor, steps } = sectors[dataIndex]
+        return `<div class="text-label"><div class="font-medium">Wind from ${compass(deg)}</div>factor ${fmtNum(factor, 3)} · ${fmtNum(steps)} values before the outage</div>`
+      },
+    },
+    xAxis: { type: 'category', data: sectors.map((s) => compass(s.deg)), name: 'Wind from', nameLocation: 'middle', nameGap: t.label * 1.8 },
+    yAxis: { type: 'value', name: '% wind vs. references', axisLabel: { formatter: (v: number) => `${v > 0 ? '+' : ''}${v}` } },
+    series: [
+      {
+        type: 'bar',
+        data: sectors.map((s) => ({ value: (s.factor - 1) * 100, itemStyle: { color: s.factor < 1 ? t.outage : t.reference } })),
+      },
+    ],
+  }
+}
+
+/** Bonus 2 in plain words: how much more or less wind the target sees from each direction than its references suggest. */
+function WakeCard({ response }: { response: AnalyzeResponse }) {
+  const sectors = wakeSectors(response)
+  const option = useCallback((t: ChartTheme) => wakeOption(sectors, t), [sectors])
+  const strongest = sectors.reduce((a, b) => (Math.abs(b.factor - 1) > Math.abs(a.factor - 1) ? b : a))
+  const change = strongest.factor - 1
+  return (
+    <Section
+      title="Wake and terrain by wind direction"
+      description={
+        <>
+          From each direction, the target gets this much more or less wind than its references suggest; the model multiplies its prediction
+          by that factor. Strongest: with wind from {compass(strongest.deg)} the target measures {fmtNum(Math.abs(change) * 100, 1)} %{' '}
+          {change < 0 ? 'less' : 'more'} ({fmtNum(strongest.steps)} values before the outage)
+          {change < 0 ? ', typical for the wake of a neighbouring turbine or terrain in that direction' : ''}. Directions with few values
+          are pulled towards 0 %.
+        </>
+      }
+      className="lg:col-span-12"
+    >
+      <Chart option={option} className="h-chart-sm" />
     </Section>
   )
 }

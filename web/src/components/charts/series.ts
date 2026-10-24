@@ -26,3 +26,6 @@ export function tooltipHtml(timeMs: number, rows: { color: string; name: string;
 /** The axis tooltip's points by series id. */
 type AxisParams = { seriesId: string; value: [number, number | null]; axisValue: number }[]
 export const byId = (params: unknown) => new Map((params as AxisParams).map((p) => [p.seriesId, p.value[1]]))
+
+/** Line style of the i-th series of one kind, e.g. each target under Total. */
+export const dash = (i: number) => (['solid', 'dashed', 'dotted'] as const)[i % 3]

@@ -50,6 +50,7 @@ const ReferenceChoice = observer(function ReferenceChoice({ response }: { respon
 
 export const MethodStep = observer(function MethodStep() {
   const { response, warnings } = store
+  if (store.showsTotal) return <TotalComparison />
   const relevant = warnings.filter((w) => w.step === 'method')
   return (
     <div className="grid gap-section lg:grid-cols-12">
@@ -103,9 +104,23 @@ const Comparison = observer(function Comparison() {
             </tr>
           </thead>
           <tbody>
-            {models.map((info) => (
-              <ModelRow key={info.name} info={info} selected={info.name === model} response={results[info.name]} failure={failures[info.name]} />
-            ))}
+            {models.map((info) => {
+              const response = results[info.name]
+              const pending = failures[info.name] ? 'failed' : '…'
+              return (
+                <ModelRow
+                  key={info.name}
+                  info={info}
+                  selected={info.name === model}
+                  cells={[
+                    ...COMPARED.map((m) => (response ? (m.key in response.validation ? m.format(response.validation[m.key]) : 'n/a') : pending)),
+                    response
+                      ? `${fmtAmount(response.energy.kwhP50)} kWh (${fmtAmount(response.energy.kwhP10)}–${fmtAmount(response.energy.kwhP90)})`
+                      : pending,
+                  ]}
+                />
+              )
+            })}
           </tbody>
         </table>
       </div>
@@ -113,9 +128,54 @@ const Comparison = observer(function Comparison() {
   )
 })
 
-function ModelRow({ info, selected, response, failure }: { info: ModelInfo; selected: boolean; response?: AnalyzeResponse; failure?: string }) {
-  const cell = (text: string) => <td className="px-3 py-2.5 text-right whitespace-nowrap">{text}</td>
-  const pending = failure ? 'failed' : '…'
+/** Total: each method's energy error on every target and its lost energy summed over them; the method applies to all targets. */
+const TotalComparison = observer(function TotalComparison() {
+  const { models, model, resultsByTarget, failuresByTarget } = store
+  const ids = store.outage ? store.targets.map((t) => t.id) : []
+  const m = METRICS.energy_wape_pct
+  return (
+    <Section
+      title="Methods on all targets"
+      description={`${m.label} of each method in the backtest of each target, lower is better, and the lost energy (P50) summed over the ${fmtNum(ids.length)} targets with an outage. Select a row to use that method for every target.`}
+    >
+      <div className="overflow-x-auto">
+        <table className="w-full text-left tabular-nums" role="radiogroup" aria-label="Method">
+          <thead className="text-label text-muted-foreground">
+            <tr className="border-b">
+              <th className="py-2 pr-3 font-medium">Method</th>
+              {ids.map((id) => (
+                <th key={id} className="px-3 py-2 text-right font-medium whitespace-nowrap">
+                  <Hint label={id}>{`${m.label}: ${m.hint}`}</Hint>
+                </th>
+              ))}
+              <th className="py-2 pl-3 text-right font-medium whitespace-nowrap">Lost energy P50, total</th>
+            </tr>
+          </thead>
+          <tbody>
+            {models.map((info) => {
+              const responses = ids.map((id) => resultsByTarget[id]?.[info.name])
+              const failed = ids.map((id) => failuresByTarget[id]?.[info.name] !== undefined)
+              const all = responses.every((r) => r !== undefined)
+              return (
+                <ModelRow
+                  key={info.name}
+                  info={info}
+                  selected={info.name === model}
+                  cells={[
+                    ...responses.map((r, i) => (r ? (m.key in r.validation ? m.format(r.validation[m.key]) : 'n/a') : failed[i] ? 'failed' : '…')),
+                    all ? `${fmtAmount(responses.reduce((sum, r) => sum + r!.energy.kwhP50, 0))} kWh` : failed.some(Boolean) ? 'failed' : '…',
+                  ]}
+                />
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
+    </Section>
+  )
+})
+
+function ModelRow({ info, selected, cells }: { info: ModelInfo; selected: boolean; cells: string[] }) {
   return (
     <tr
       role="radio"
@@ -136,12 +196,11 @@ function ModelRow({ info, selected, response, failure }: { info: ModelInfo; sele
           {info.recommended && ` Best score on our benchmark of ${BENCHMARK.datasets} datasets (see How it works).`}
         </span>
       </td>
-      {COMPARED.map((m) => cell(response ? (m.key in response.validation ? m.format(response.validation[m.key]) : 'n/a') : pending))}
-      {cell(
-        response
-          ? `${fmtAmount(response.energy.kwhP50)} kWh (${fmtAmount(response.energy.kwhP10)}–${fmtAmount(response.energy.kwhP90)})`
-          : pending,
-      )}
+      {cells.map((text, i) => (
+        <td key={i} className="px-3 py-2.5 text-right whitespace-nowrap">
+          {text}
+        </td>
+      ))}
     </tr>
   )
 }

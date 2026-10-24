@@ -5,6 +5,7 @@ import { EngineBar } from '@/components/EngineBar'
 import { HowItWorks } from '@/components/HowItWorks'
 import { fmtAmount, fmtDuration } from '@/components/format'
 import { Button } from '@/components/ui/button'
+import { calculating } from '@/components/metrics'
 import { checksText } from '@/components/Warnings'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
@@ -51,9 +52,19 @@ function stepStatus(step: Step): string {
   if (step === 'outage') return outage ? fmtDuration(outage.endMs - outage.startMs) : 'Select a period'
   if (step === 'method') return store.label(model)
   if (!store.turbinesConfirmed) return 'Confirm turbines'
+  if (step === 'results' && store.total && store.targets.length > 1) {
+    const kwh = totalKwh()
+    return kwh === undefined ? 'Calculating…' : `${fmtAmount(kwh)} kWh lost`
+  }
   if (status === 'running') return 'Calculating…'
   if (step === 'results') return response ? `${fmtAmount(response.energy.kwhP50)} kWh lost` : status === 'error' ? 'Not available' : '—'
   return response ? 'PDF · CSV · email' : '—'
+}
+
+/** The P50 sum over the calculated targets; undefined while one is still being calculated. */
+function totalKwh() {
+  const { cases } = store
+  return cases.some(calculating) ? undefined : cases.reduce((sum, c) => sum + (c.response?.energy.kwhP50 ?? 0), 0)
 }
 
 const Stepper = observer(function Stepper() {
@@ -104,12 +115,18 @@ const Stepper = observer(function Stepper() {
   )
 })
 
-/** Several targets: steps 2–5 show one; each button carries that target's lost energy with the selected model. */
+/** Several targets: steps 2–5 show all of them as Total or one; each button carries the lost energy with the selected model. */
 const TargetSwitch = observer(function TargetSwitch() {
-  const { targets, target, resultsByTarget, model } = store
+  const { targets, resultsByTarget, model, showsTotal } = store
+  const target = !showsTotal && store.target
+  const kwh = totalKwh()
   return (
     <div className="flex flex-wrap items-center gap-2" role="radiogroup" aria-label="Target">
       <span className="text-label text-muted-foreground">Target</span>
+      <Button size="sm" role="radio" aria-checked={showsTotal} variant={showsTotal ? 'default' : 'outline'} onClick={() => store.selectTotal()}>
+        Total
+        <span className="tabular-nums opacity-80">{kwh === undefined ? '…' : `${fmtAmount(kwh)} kWh`}</span>
+      </Button>
       {targets.map((t) => {
         const response = resultsByTarget[t.id]?.[model]
         return (

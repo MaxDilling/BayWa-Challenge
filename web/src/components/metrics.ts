@@ -213,5 +213,30 @@ export function densityText({ airDensity: d, kwhP50 }: AnalyzeResponse['energy']
   ).trim()
 }
 
+/** One target in the Total list and the report; `response` is missing when the selected model has no result for it. */
+export interface Case {
+  id: string
+  dataset?: Dataset
+  outage?: Span
+  response?: AnalyzeResponse
+  failure?: string
+  /** Name or file of the target's power curve. */
+  curve: string
+}
+
+export const calculating = (c: Case) => !!c.dataset && !!c.outage && !c.response && c.failure === undefined
+
+/** Why a target has no result, in words for the Total list and the report. */
+export const missing = ({ outage, failure }: Case) =>
+  !outage ? 'No outage detected or selected' : failure !== undefined ? `Not calculated: ${failure}` : 'Still calculating'
+
+/** "Total of all 3 targets" or "Total of the 2 calculated targets" */
+export const totalText = (done: number, all: number) => `Total of ${done === all ? `all ${done}` : `the ${done} calculated`} targets`
+
+/** Why the total has a P50 but no range (SPEC.md S4). */
+export const TOTAL_HINT =
+  'The P50 values add up to the expected total. The 10–90 % ranges cannot be added: adding the P10 or the P90 values would assume that ' +
+  'the errors of all targets go the same way at every moment, so the range of the total is not stated.'
+
 /** The lost energy in one sentence for insurers. */
 export const headline = (energy: AnalyzeResponse['energy']) => `Most likely ${fmtAmount(energy.kwhP50)} kWh; ${rangeText(energy)}.`

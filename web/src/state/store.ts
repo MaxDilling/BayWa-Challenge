@@ -16,6 +16,7 @@ import {
   type Span,
   type WindSeries,
 } from '@/data'
+import type { Case } from '@/components/metrics'
 import { createEngine, requestedEngine, type AnalyzeResponse, type EngineHandle, type EngineId, type ModelInfo } from '@/engine'
 
 export const STEPS = ['upload', 'outage', 'method', 'results', 'export'] as const
@@ -51,11 +52,13 @@ export const RootStore = types
     turbinesConfirmed: true,
     /** Id of the target that steps 2–5 show. */
     active: '',
-    /** Each target's outage, by target id. */
-    outages: types.frozen<Record<string, Span>>({}),
+    /** With several targets, steps 2–5 show them all until one is picked. */
+    total: true,
+    /** One outage for every target, so that their losses cover the same period. */
+    outage: types.frozen<Span | undefined>(undefined),
     /** Empty until the engine lists its models; then the recommended one. */
     model: '',
-    /** Every model's response per target for the current data and outages, so the Method step can compare them. */
+    /** Every model's response per target for the current data and outage, so the Method step can compare them. */
     resultsByTarget: types.frozen<Record<string, Record<string, AnalyzeResponse>>>({}),
     failuresByTarget: types.frozen<Record<string, Record<string, string>>>({}),
     step: types.optional(types.enumeration<Step>([...STEPS]), 'upload'),
@@ -73,6 +76,9 @@ export const RootStore = types
     dwd: [] as WindSeries[],
   }))
   .views((self) => ({
+    get showsTotal(): boolean {
+      return self.total && self.targets.length > 1 && self.step !== 'upload'
+    },
     get target(): WindSeries | undefined {
       return self.targets.find((t) => t.id === self.active) ?? self.targets[0]
     },
@@ -101,9 +107,6 @@ export const RootStore = types
       if (!usedReferences.length) return {}
       return Object.fromEntries(self.targets.map((t) => [t.id, buildDataset(t, usedReferences, self.curveOf(t.id).curve, nTurbines)]))
     },
-    get outage(): Span | undefined {
-      return self.target && self.outages[self.target.id]
-    },
     /** Every model's response for the target on view. */
     get results(): Record<string, AnalyzeResponse> {
       return (self.target && self.resultsByTarget[self.target.id]) ?? {}
@@ -113,6 +116,17 @@ export const RootStore = types
     },
   }))
   .views((self) => ({
+    /** Every target with the selected model's result. */
+    get cases(): Case[] {
+      return self.targets.map(({ id }) => ({
+        id,
+        dataset: self.datasets[id],
+        outage: self.outage,
+        response: self.resultsByTarget[id]?.[self.model],
+        failure: self.failuresByTarget[id]?.[self.model],
+        curve: self.curveOf(id).name,
+      }))
+    },
     get dataset(): Dataset | undefined {
       return self.target && self.datasets[self.target.id]
     },
@@ -124,36 +138,52 @@ export const RootStore = types
     },
   }))
   .views((self) => ({
+    /** The datasets steps 2–5 show: every target's under Total, else the one on view. */
+    get shown(): Dataset[] {
+      if (!self.showsTotal) return self.dataset ? [self.dataset] : []
+      return self.targets.flatMap((t) => self.datasets[t.id] ?? [])
+    },
+    /** The targets the report covers: all of them under Total, else the one on view. */
+    get reportCases(): Case[] {
+      return self.showsTotal ? self.cases : self.cases.filter((c) => c.id === self.target?.id)
+    },
     get status(): 'idle' | 'running' | 'error' {
       if (self.response) return 'idle'
       if (self.error !== undefined) return 'error'
       return self.dataset && self.outage && self.engine && self.turbinesConfirmed ? 'running' : 'idle'
     },
+    warningsOf(id: string) {
+      const dataset = self.datasets[id]
+      return dataset ? plausibility(dataset, self.outage, self.resultsByTarget[id]?.[self.model]?.explanation.diagnostics.r) : []
+    },
+  }))
+  .views((self) => ({
+    /** The shown targets with the selected model's result: what the Results charts draw. */
+    get calculated(): Required<Case>[] {
+      return self.shown.flatMap((d) => self.cases.filter((c): c is Required<Case> => c.dataset === d && !!c.response))
+    },
+    /** The checks of the target on view, or under Total of every target, each named. */
     get warnings() {
-      return self.dataset ? plausibility(self.dataset, self.outage, self.response?.explanation.diagnostics.r) : []
+      if (!self.showsTotal) return self.target ? self.warningsOf(self.target.id) : []
+      return self.targets.flatMap((t) => self.warningsOf(t.id).map((w) => ({ ...w, title: `${t.id}: ${w.title}` })))
     },
   }))
   .actions((self) => ({
     setStep(step: Step) {
       self.step = step
     },
-    /** The first detected outage for every target that has none; a target without an outage gets none. */
-    fillOutages() {
-      self.outages = Object.fromEntries(
-        self.targets.flatMap((t) => {
-          const outage = self.outages[t.id] ?? self.datasets[t.id]?.outages[0]
-          return outage ? [[t.id, outage]] : []
-        }),
-      )
+    /** Without an outage the first detected one of the first target that has one. */
+    fillOutage() {
+      self.outage ??= self.targets.map((t) => self.datasets[t.id]?.outages[0]).find(Boolean)
       if (!self.targets.some((t) => t.id === self.active)) self.active = self.targets[0]?.id ?? ''
     },
   }))
   .actions((self) => ({
-    /** New targets or references: every target's outage is detected afresh. */
+    /** New targets or references: the outage is detected afresh. */
     setInputs(inputs: Inputs) {
       Object.assign(self, inputs)
-      self.outages = {}
-      self.fillOutages()
+      self.outage = undefined
+      self.fillOutage()
     },
     /** Newly uploaded curves: a target of the same site switches to its curve, whatever was picked before. */
     curvesArrived(curves: UploadedCurve[]) {
@@ -174,10 +204,14 @@ export const RootStore = types
       self.turbinesConfirmed = true
     },
     setOutage(outage: Span) {
-      self.outages = { ...self.outages, [self.target!.id]: outage }
+      self.outage = outage
     },
     selectTarget(id: string) {
       self.active = id
+      self.total = false
+    },
+    selectTotal() {
+      self.total = true
     },
     selectModel(model: string) {
       self.model = model
@@ -229,14 +263,14 @@ export const RootStore = types
     toggleTarget(id: string) {
       const series = self.assignment!.series
       const ids = self.targets.some((t) => t.id === id) ? self.targets.filter((t) => t.id !== id).map((t) => t.id) : [...self.targets.map((t) => t.id), id]
-      const outages = self.outages
+      const outage = self.outage
       self.targetsChosen = true
       self.setInputs({ targets: series.filter((s) => ids.includes(s.id)), references: series.filter((s) => !ids.includes(s.id)) })
-      self.outages = { ...self.outages, ...Object.fromEntries(Object.entries(outages).filter(([t]) => ids.includes(t))) }
+      if (outage && ids.length) self.outage = outage
     },
     toggleStation(id: string) {
       self.stations = self.stations.includes(id) ? self.stations.filter((s) => s !== id) : [...self.stations, id]
-      self.fillOutages()
+      self.fillOutage()
     },
   }))
   .actions((self) => {
@@ -260,14 +294,13 @@ export const RootStore = types
       /** All models for every target, the target on view and the selected model first; a model or target change then
        * only switches the view. */
       runAnalysis: flow(function* () {
-        const { datasets, outages, engine, models, model, turbinesConfirmed, target } = self
+        const { datasets, outage, engine, models, model, turbinesConfirmed, target } = self
         self.resultsByTarget = {}
         self.failuresByTarget = {}
         if (!engine || !turbinesConfirmed || !target) return
         const current = ++run
         for (const id of [target.id, ...self.targets.map((t) => t.id).filter((t) => t !== target.id)]) {
           const dataset = datasets[id]
-          const outage = outages[id]
           if (!dataset || !outage) continue
           for (const name of [model, ...models.map((m) => m.name).filter((m) => m !== model)]) {
             try {
@@ -288,7 +321,7 @@ export const RootStore = types
       addDisposer(
         self,
         reaction(
-          () => [self.datasets, self.outages, self.engine, self.turbinesConfirmed],
+          () => [self.datasets, self.outage, self.engine, self.turbinesConfirmed],
           () => self.runAnalysis(),
         ),
       )

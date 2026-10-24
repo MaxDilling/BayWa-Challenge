@@ -7,26 +7,27 @@ import { jsPDF } from 'jspdf'
 import { chartImage, type ChartTheme } from '@/components/charts/Chart'
 import { readTheme } from '@/components/charts/theme'
 import { fmtAmount, fmtDateTimeZone, fmtDuration, fmtNum, fmtSpanZone } from '@/components/format'
-import { compass, densityText, farmText, referenceRoles, SECTOR_TEXT, sectorWeights, toolText, wakeSectors, wakeText } from '@/components/metrics'
-import type { Dataset, Span } from '@/data'
-import type { AnalyzeResponse } from '@/engine'
+import {
+  compass,
+  densityText,
+  farmText,
+  missing,
+  referenceRoles,
+  SECTOR_TEXT,
+  sectorWeights,
+  toolText,
+  TOTAL_HINT,
+  totalText,
+  wakeSectors,
+  wakeText,
+  type Case,
+} from '@/components/metrics'
 import { wakeOption } from '@/steps/MethodStep'
 import { cumulativeOption, windOption } from '@/steps/ResultsStep'
 // the challenge organiser's logo, from www.baywa-re.com (320 × 77 px)
 import logo from './baywa-re-logo.png?inline'
 import regular from './fonts/inter-400.ttf?inline'
 import semibold from './fonts/inter-600.ttf?inline'
-
-/** One target; `response` is missing when the selected model has no result for it. */
-export interface Case {
-  id: string
-  dataset?: Dataset
-  outage?: Span
-  response?: AnalyzeResponse
-  failure?: string
-  /** Name or file of the target's power curve. */
-  curve: string
-}
 
 export interface ReportInput {
   cases: Case[]
@@ -40,10 +41,6 @@ export interface ReportInput {
   files: string[]
   created: number
 }
-
-/** Why a target has no result, in words for the overview. */
-export const missing = ({ outage, failure }: Case) =>
-  !outage ? 'No outage detected or selected' : failure !== undefined ? `Not calculated: ${failure}` : 'Still calculating'
 
 const MM_PER_PT = 25.4 / 72
 const LOGO_MM = { width: 45, height: (45 * 77) / 320 }
@@ -246,8 +243,8 @@ export function reportPdf(input: ReportInput): Blob {
         gap: 2,
       })
       w.text(targets, { size: s.title, bold: true, gap: 0 })
-      const outages = input.cases.filter((c) => c.outage)
-      if (outages.length === 1) w.text(`Outage period: ${fmtSpanZone(outages[0].outage!)}`, { bold: true })
+      const outage = input.cases.find((c) => c.outage)?.outage
+      if (outage) w.text(`Outage period: ${fmtSpanZone(outage)}`, { bold: true })
       w.text(`Method: ${input.method}`, { size: s.label })
     },
   )
@@ -304,7 +301,7 @@ function overview(w: Writer, input: ReportInput, done: Required<Case>[]) {
       ...(done.length > 1
         ? [
             [
-              { text: `Total of ${done.length === input.cases.length ? `all ${done.length}` : `the ${done.length} calculated`} targets`, bold: true },
+              { text: totalText(done.length, input.cases.length), bold: true },
               { text: '' },
               { text: '' },
               { ...kwh(done.reduce((sum, c) => sum + c.response.energy.kwhP50, 0)), bold: true },
@@ -314,12 +311,7 @@ function overview(w: Writer, input: ReportInput, done: Required<Case>[]) {
         : []),
     ],
   )
-  if (done.length > 1)
-    w.text(
-      'The P50 values add up to the expected total. The 10–90 % ranges cannot be added: adding the P10 or the P90 values would assume that ' +
-        'the errors of all targets go the same way at every moment, so the range of the total is not stated.',
-      { color: s.muted },
-    )
+  if (done.length > 1) w.text(TOTAL_HINT, { color: s.muted })
 }
 
 function target(w: Writer, c: Required<Case>, input: ReportInput, chart: ChartTheme) {
@@ -329,7 +321,7 @@ function target(w: Writer, c: Required<Case>, input: ReportInput, chart: ChartTh
   const roles = referenceRoles(dataset.references, explanation)
   const sectors = wakeSectors(explanation)
   const half = { width: chart.print.width / 2, height: chart.print.heightSm }
-  const cumulative = chartImage(cumulativeOption(response, chart), chart, half.height, half.width)
+  const cumulative = chartImage(cumulativeOption([c], chart), chart, half.height, half.width)
 
   w.text(`Target ${c.id}`, { size: s.heading, bold: true, gap: 3 })
   w.table(
@@ -343,7 +335,7 @@ function target(w: Writer, c: Required<Case>, input: ReportInput, chart: ChartTh
     roles.map((r) => [{ text: r.id }, { text: r.role }, { text: input.stations.includes(r.id) ? 'DWD weather station' : 'Uploaded series' }]),
   )
   const used = { ...dataset, references: dataset.references.filter((_, i) => roles[i].used) }
-  const wind = chartImage({ ...windOption(used, response, outage, chart), grid: {} }, chart, chart.print.height)
+  const wind = chartImage({ ...windOption([{ ...c, dataset: used }], outage, chart), grid: {} }, chart, chart.print.height)
   w.keep(() => {
     w.title('Wind speed')
     w.text(

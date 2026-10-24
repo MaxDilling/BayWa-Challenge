@@ -2,10 +2,10 @@ import { observer } from 'mobx-react-lite'
 import { useCallback } from 'react'
 import { AnalysisState } from '@/components/AnalysisState'
 import { Chart, type ChartTheme } from '@/components/charts/Chart'
-import { byId, gridPoints, tooltipHtml } from '@/components/charts/series'
+import { byId, dash, gridPoints, tooltipHtml } from '@/components/charts/series'
 import { fmtAmount, fmtAxisTime, fmtDayTime, fmtDuration, fmtNum, fmtPct, fmtSpan, HOUR, STEP_MS } from '@/components/format'
 import { Hint } from '@/components/Hint'
-import { ACCURACY, BAND_HINT, calculating, densityText, farmText, missing, rangeText, TOTAL_HINT, totalText, verdict } from '@/components/metrics'
+import { ACCURACY, BAND_HINT, calculating, densityText, farmText, METRICS, missing, rangeText, TOTAL_HINT, totalText, verdict } from '@/components/metrics'
 import { Notice } from '@/components/Notice'
 import { Section } from '@/components/Section'
 import { Warnings, WarningSummary } from '@/components/Warnings'
@@ -17,9 +17,8 @@ import { store } from '@/state/store'
 const CHECKS_ID = 'data-checks'
 
 export const ResultsStep = observer(function ResultsStep() {
-  const { response, dataset, outage, warnings } = store
-  if (store.showsTotal) return <TotalCard />
-  if (!response || !dataset || !outage) return <AnalysisState />
+  const { response, dataset, outage, warnings, calculated, showsTotal } = store
+  if (!dataset || !outage || !calculated.length || (!showsTotal && !response)) return <AnalysisState />
   return (
     <div className="grid gap-section lg:grid-cols-12">
       {warnings.length > 0 && (
@@ -27,14 +26,23 @@ export const ResultsStep = observer(function ResultsStep() {
           <WarningSummary items={warnings} detailsId={CHECKS_ID} />
         </div>
       )}
-      <EnergyCard response={response} outage={outage} dataset={dataset} />
-      <AccuracyCard
-        validation={response.validation}
-        outage={outage}
-        farmKw={Math.max(...dataset.powerCurve.powerKw) * dataset.nTurbines}
-      />
-      <WindCard dataset={dataset} response={response} outage={outage} />
-      <EnergyCharts response={response} />
+      {showsTotal ? (
+        <>
+          <TotalEnergyCard outage={outage} />
+          <TotalCard />
+        </>
+      ) : (
+        <>
+          <EnergyCard response={response!} outage={outage} dataset={dataset} />
+          <AccuracyCard
+            validation={response!.validation}
+            outage={outage}
+            farmKw={Math.max(...dataset.powerCurve.powerKw) * dataset.nTurbines}
+          />
+        </>
+      )}
+      <WindCard cases={calculated} outage={outage} />
+      <EnergyCharts cases={calculated} />
       {warnings.length > 0 && (
         <Section id={CHECKS_ID} title="Data checks" description="Worth a look before the numbers are sent; they also go into the email." className="lg:col-span-12">
           <Warnings items={warnings} />
@@ -44,60 +52,75 @@ export const ResultsStep = observer(function ResultsStep() {
   )
 })
 
-/** Every target with the selected model, as in the report's summary; only the P50 values add up. */
-export const TotalCard = observer(function TotalCard() {
-  const { cases } = store
-  const done = cases.filter((c) => c.response)
-  const cell = 'px-3 py-2.5 whitespace-nowrap'
+/** Total: the P50 of every calculated target summed; the ranges are not added (SPEC.md S4). */
+const TotalEnergyCard = observer(function TotalEnergyCard({ outage }: { outage: Span }) {
+  const { cases, calculated } = store
   return (
-    <Section title="Lost energy of all targets" description={`One row per target with ${store.label(store.model)}.`}>
+    <Section
+      title="Lost energy"
+      description={`${fmtNum(cases.length)} targets · ${fmtDuration(outage.endMs - outage.startMs)} outage · ${fmtSpan(outage)}`}
+      className="lg:col-span-4"
+    >
+      <p className="flex items-baseline gap-2">
+        <span className="text-kpi font-semibold tabular-nums">{fmtAmount(calculated.reduce((sum, c) => sum + c.response.energy.kwhP50, 0))}</span>
+        <span className="text-stat text-muted-foreground">kWh</span>
+      </p>
+      <p className="text-label text-muted-foreground">Most likely loss (P50), {totalText(calculated.length, cases.length).toLowerCase()}</p>
+      <p className="text-label text-pretty text-muted-foreground">{TOTAL_HINT}</p>
+    </Section>
+  )
+})
+
+const COMPARED = [METRICS.energy_wape_pct, METRICS.wind_rmse, METRICS.coverage_80]
+
+/** Total: every target's lost energy and backtest with the selected model, one row each. */
+const TotalCard = observer(function TotalCard() {
+  const cell = 'px-3 py-2.5 text-right whitespace-nowrap'
+  return (
+    <Section title="Each target" description={`Lost energy and the backtest on each target's own data with ${store.label(store.model)}.`} className="lg:col-span-8">
       <div className="overflow-x-auto">
         <table className="w-full text-left tabular-nums">
           <thead className="text-label text-muted-foreground">
             <tr className="border-b">
               <th className="py-2 pr-3 font-medium">Target</th>
-              <th className="px-3 py-2 font-medium">Outage</th>
-              <th className="px-3 py-2 text-right font-medium">Duration</th>
               <th className="px-3 py-2 text-right font-medium">Lost energy P50</th>
-              <th className="py-2 pl-3 text-right font-medium">Range P10–P90</th>
+              <th className="px-3 py-2 text-right font-medium">Range P10–P90</th>
+              {COMPARED.map((m) => (
+                <th key={m.key} className="px-3 py-2 text-right font-medium whitespace-nowrap">
+                  <Hint label={m.label}>{m.hint}</Hint>
+                </th>
+              ))}
             </tr>
           </thead>
           <tbody>
-            {cases.map((c) => {
-              const e = c.response?.energy
+            {store.cases.map((c) => {
+              const r = c.response
               return (
-                <tr key={c.id} className="border-b">
+                <tr key={c.id} className="border-b last:border-0">
                   <td className="py-2.5 pr-3 font-medium">{c.id}</td>
-                  {e ? (
+                  {r ? (
                     <>
-                      <td className={cell}>{fmtSpan(c.outage!)}</td>
-                      <td className={cn(cell, 'text-right')}>{fmtDuration(c.outage!.endMs - c.outage!.startMs)}</td>
-                      <td className={cn(cell, 'text-right')}>{fmtAmount(e.kwhP50)} kWh</td>
-                      <td className="py-2.5 pl-3 text-right whitespace-nowrap">
-                        {fmtAmount(e.kwhP10)}–{fmtAmount(e.kwhP90)} kWh
+                      <td className={cell}>{fmtAmount(r.energy.kwhP50)} kWh</td>
+                      <td className={cell}>
+                        {fmtAmount(r.energy.kwhP10)}–{fmtAmount(r.energy.kwhP90)} kWh
                       </td>
+                      {COMPARED.map((m) => (
+                        <td key={m.key} className={cell}>
+                          {m.key in r.validation ? m.format(r.validation[m.key]) : 'n/a'}
+                        </td>
+                      ))}
                     </>
                   ) : (
-                    <td colSpan={4} className={cn('py-2.5 pl-3', calculating(c) ? 'text-muted-foreground' : 'text-destructive')}>
+                    <td colSpan={2 + COMPARED.length} className={cn('py-2.5 pl-3', calculating(c) ? 'text-muted-foreground' : 'text-destructive')}>
                       {missing(c)}
                     </td>
                   )}
                 </tr>
               )
             })}
-            {done.length > 1 && (
-              <tr className="font-semibold">
-                <td colSpan={3} className="py-2.5 pr-3">
-                  {totalText(done.length, cases.length)}
-                </td>
-                <td className={cn(cell, 'text-right')}>{fmtAmount(done.reduce((sum, c) => sum + c.response!.energy.kwhP50, 0))} kWh</td>
-                <td className="py-2.5 pl-3 text-right font-normal text-muted-foreground">not added</td>
-              </tr>
-            )}
           </tbody>
         </table>
       </div>
-      {done.length > 1 && <p className="text-label text-pretty text-muted-foreground">{TOTAL_HINT}</p>}
     </Section>
   )
 })
@@ -170,30 +193,39 @@ function AccuracyCard({ validation, outage, farmKw }: { validation: Record<strin
   )
 }
 
-export function windOption(dataset: Dataset, response: AnalyzeResponse, outage: Span, t: ChartTheme) {
+/** A target with its result, as the charts take it; several lie on top of each other, told apart by their line style. */
+type Shown = { id: string; dataset: Dataset; response: AnalyzeResponse }
+
+/** Every target shares the references, so they are drawn once, from the first. */
+export function windOption(cases: Shown[], outage: Span, t: ChartTheme) {
   const length = outage.endMs - outage.startMs
   const pad = Math.min(Math.max(length, 12 * HOUR), 72 * HOUR)
   const [from, to] = [outage.startMs - pad, outage.endMs + pad]
-  const { t0, mean, q10, q90 } = response.prediction
-  const at = (values: number[]) => values.map((v, i) => [t0 + i * STEP_MS, v])
-  const refs = dataset.references
+  const refs = cases[0].dataset.references
+  const several = cases.length > 1
+  const at = ({ prediction: { t0 } }: AnalyzeResponse, values: number[]) => values.map((v, i) => [t0 + i * STEP_MS, v])
   return {
     legend: {},
-    grid: { bottom: t.label * 4.5 },
+    grid: { bottom: t.label * 4.5, ...(several && { top: t.label * 7 }) },
     tooltip: {
       trigger: 'axis',
       formatter: (params: unknown) => {
         const v = byId(params)
-        const [lo, width] = [v.get('band-lo'), v.get('band')]
         const ms = (x: number | null | undefined) => (x == null ? undefined : `${fmtNum(x, 2)} m/s`)
         return tooltipHtml((params as { axisValue: number }[])[0].axisValue, [
-          { color: t.prediction, name: 'Predicted', value: ms(v.get('mean')) },
-          {
-            color: t.band,
-            name: '80 % band',
-            value: lo == null || width == null ? undefined : `${fmtNum(lo, 2)}–${fmtNum(lo + width, 2)} m/s`,
-          },
-          { color: t.measured, name: 'Measured', value: ms(v.get('target')) },
+          ...cases.flatMap(({ id }, k) => {
+            const [lo, width] = [v.get(`band-lo-${k}`), v.get(`band-${k}`)]
+            const name = (what: string) => (several ? `${id} ${what.toLowerCase()}` : what)
+            return [
+              { color: t.prediction, name: name('Predicted'), value: ms(v.get(`mean-${k}`)) },
+              {
+                color: t.band,
+                name: name('80 % band'),
+                value: lo == null || width == null ? undefined : `${fmtNum(lo, 2)}–${fmtNum(lo + width, 2)} m/s`,
+              },
+              { color: t.measured, name: name('Measured'), value: ms(v.get(`target-${k}`)) },
+            ]
+          }),
           ...refs.map((r, i) => ({ color: t.reference, name: r.id, value: ms(v.get(`ref-${i}`)) })),
         ])
       },
@@ -202,15 +234,15 @@ export function windOption(dataset: Dataset, response: AnalyzeResponse, outage: 
     yAxis: { type: 'value', name: 'm/s', min: 0 },
     dataZoom: [{ type: 'inside' }, { type: 'slider', height: t.label * 2, bottom: t.label * 0.5 }],
     series: [
-      {
-        id: 'target',
-        name: 'Measured (target)',
+      ...cases.map(({ id, dataset }, k) => ({
+        id: `target-${k}`,
+        name: several ? `${id} measured` : 'Measured (target)',
         type: 'line',
         data: gridPoints(dataset.target.grid, from, to),
-        lineStyle: { color: t.measured, width: t.lineThin },
+        lineStyle: { color: t.measured, width: t.lineThin, type: dash(k) },
         itemStyle: { color: t.measured },
-        markArea: { silent: true, itemStyle: { color: t.outage }, data: [[{ xAxis: outage.startMs }, { xAxis: outage.endMs }]] },
-      },
+        ...(k === 0 && { markArea: { silent: true, itemStyle: { color: t.outage }, data: [[{ xAxis: outage.startMs }, { xAxis: outage.endMs }]] } }),
+      })),
       ...refs.map((r, i) => ({
         id: `ref-${i}`,
         name: refs.length > 1 ? r.id : 'Reference',
@@ -219,43 +251,51 @@ export function windOption(dataset: Dataset, response: AnalyzeResponse, outage: 
         lineStyle: { color: t.reference, width: t.lineThin, type: i ? 'dashed' : 'solid' },
         itemStyle: { color: t.reference },
       })),
-      {
-        id: 'band-lo',
-        name: '80 % band',
-        type: 'line',
-        stack: 'band',
-        data: at(q10),
-        lineStyle: { opacity: 0 },
-        itemStyle: { color: t.band },
-      },
-      {
-        id: 'band',
-        name: '80 % band',
-        type: 'line',
-        stack: 'band',
-        data: at(q90.map((v, i) => v - q10[i])),
-        lineStyle: { opacity: 0 },
-        itemStyle: { color: t.band },
-        areaStyle: { color: t.band, opacity: t.bandOpacity },
-      },
-      {
-        id: 'mean',
-        name: 'Predicted',
-        type: 'line',
-        data: at(mean),
-        lineStyle: { color: t.prediction, width: t.line },
-        itemStyle: { color: t.prediction },
-      },
+      ...cases.flatMap(({ id, response }, k) => {
+        const { mean, q10, q90 } = response.prediction
+        return [
+          {
+            id: `band-lo-${k}`,
+            name: '80 % band',
+            type: 'line',
+            stack: `band-${k}`,
+            data: at(response, q10),
+            lineStyle: { opacity: 0 },
+            itemStyle: { color: t.band },
+          },
+          {
+            id: `band-${k}`,
+            name: '80 % band',
+            type: 'line',
+            stack: `band-${k}`,
+            data: at(
+              response,
+              q90.map((v, i) => v - q10[i]),
+            ),
+            lineStyle: { opacity: 0 },
+            itemStyle: { color: t.band },
+            areaStyle: { color: t.band, opacity: t.bandOpacity },
+          },
+          {
+            id: `mean-${k}`,
+            name: several ? `${id} predicted` : 'Predicted',
+            type: 'line',
+            data: at(response, mean),
+            lineStyle: { color: t.prediction, width: t.line, type: dash(k) },
+            itemStyle: { color: t.prediction },
+          },
+        ]
+      }),
     ],
   }
 }
 
-function WindCard({ dataset, response, outage }: { dataset: Dataset; response: AnalyzeResponse; outage: Span }) {
-  const option = useCallback((t: ChartTheme) => windOption(dataset, response, outage, t), [dataset, response, outage])
+function WindCard({ cases, outage }: { cases: Shown[]; outage: Span }) {
+  const option = useCallback((t: ChartTheme) => windOption(cases, outage, t), [cases, outage])
   return (
     <Section
       title="Wind speed"
-      description="Prediction with its 80 % band (10 % to 90 % quantile) during the outage, and the measurements before and after."
+      description={`Prediction with its 80 % band (10 % to 90 % quantile) during the outage, and the measurements before and after${cases.length > 1 ? '; one line style per target' : ''}.`}
       className="lg:col-span-12"
     >
       <Chart option={option} className="h-chart" />
@@ -275,59 +315,83 @@ function hourly(response: AnalyzeResponse) {
   return [...hours]
 }
 
-export function cumulativeOption(response: AnalyzeResponse, t: ChartTheme) {
-  const { t0 } = response.prediction
+export function cumulativeOption(cases: Pick<Shown, 'id' | 'response'>[], t: ChartTheme) {
+  const several = cases.length > 1
   return {
+    ...(several && { legend: {} }),
     tooltip: {
       trigger: 'axis',
       formatter: (params: unknown) => {
-        const [p] = params as { value: [number, number] }[]
-        return tooltipHtml(p.value[0], [{ color: t.energy, name: 'Lost so far (P50)', value: `${fmtAmount(p.value[1])} kWh` }])
+        const points = params as { seriesIndex: number; value: [number, number] }[]
+        return tooltipHtml(
+          points[0].value[0],
+          points.map((p) => ({ color: t.energy, name: several ? `${cases[p.seriesIndex].id} lost so far (P50)` : 'Lost so far (P50)', value: `${fmtAmount(p.value[1])} kWh` })),
+        )
       },
     },
-    grid: { top: t.label * 2 },
+    grid: { top: t.label * (several ? 4 : 2) },
     xAxis: { type: 'time' },
     yAxis: { type: 'value', name: 'kWh' },
-    series: [
-      {
-        type: 'line',
-        data: [[t0, 0], ...response.energy.cumulativeKwh.map((c, i) => [t0 + (i + 1) * STEP_MS, c])],
-        lineStyle: { color: t.energy, width: t.line },
-        itemStyle: { color: t.energy },
-        areaStyle: { color: t.energy, opacity: t.areaOpacity },
-      },
-    ],
+    series: cases.map(({ id, response }, k) => ({
+      name: id,
+      type: 'line',
+      data: [[response.prediction.t0, 0], ...response.energy.cumulativeKwh.map((c, i) => [response.prediction.t0 + (i + 1) * STEP_MS, c])],
+      lineStyle: { color: t.energy, width: t.line, type: dash(k) },
+      itemStyle: { color: t.energy },
+      ...(!several && { areaStyle: { color: t.energy, opacity: t.areaOpacity } }),
+    })),
   }
 }
 
-function hourlyOption(response: AnalyzeResponse, t: ChartTheme) {
-  const hours = hourly(response)
+/** Several targets stack per hour, each a step lighter; the stack's height is their summed P50. */
+function hourlyOption(cases: Shown[], t: ChartTheme) {
+  const perTarget = cases.map((c) => hourly(c.response))
+  const several = cases.length > 1
   return {
+    ...(several && { legend: {} }),
     tooltip: {
       trigger: 'axis',
       formatter: (params: unknown) => {
-        const [p] = params as { dataIndex: number }[]
-        const [hour, kwh] = hours[p.dataIndex]
-        return tooltipHtml(hour, [{ color: t.energy, name: 'Lost in this hour (P50)', value: `${fmtAmount(kwh)} kWh` }])
+        const points = params as { dataIndex: number; seriesIndex: number }[]
+        const [hour] = perTarget[0][points[0].dataIndex]
+        return tooltipHtml(
+          hour,
+          points.map((p) => ({
+            color: t.energy,
+            name: several ? `${cases[p.seriesIndex].id} lost in this hour (P50)` : 'Lost in this hour (P50)',
+            value: `${fmtAmount(perTarget[p.seriesIndex][p.dataIndex][1])} kWh`,
+          })),
+        )
       },
     },
-    grid: { top: t.label * 2 },
-    xAxis: { type: 'category', data: hours.map(([h]) => fmtAxisTime(h)), axisLabel: { hideOverlap: true } },
+    grid: { top: t.label * (several ? 4 : 2) },
+    xAxis: { type: 'category', data: perTarget[0].map(([h]) => fmtAxisTime(h)), axisLabel: { hideOverlap: true } },
     yAxis: { type: 'value', name: 'kWh' },
-    series: [{ type: 'bar', data: hours.map(([, kwh]) => kwh), itemStyle: { color: t.energy, borderRadius: t.point } }],
+    series: cases.map(({ id }, k) => ({
+      name: id,
+      type: 'bar',
+      stack: 'loss',
+      data: perTarget[k].map(([, kwh]) => kwh),
+      itemStyle: { color: t.energy, opacity: 1 - (0.6 * k) / cases.length, ...(k === cases.length - 1 && { borderRadius: t.point }) },
+    })),
   }
 }
 
-function EnergyCharts({ response }: { response: AnalyzeResponse }) {
-  const cumulative = useCallback((t: ChartTheme) => cumulativeOption(response, t), [response])
-  const bars = useCallback((t: ChartTheme) => hourlyOption(response, t), [response])
+function EnergyCharts({ cases }: { cases: Shown[] }) {
+  const cumulative = useCallback((t: ChartTheme) => cumulativeOption(cases, t), [cases])
+  const bars = useCallback((t: ChartTheme) => hourlyOption(cases, t), [cases])
+  const { response } = cases[0]
   const end = response.prediction.t0 + response.energy.cumulativeKwh.length * STEP_MS
   return (
     <>
-      <Section title="Cumulative loss" description={`Expected energy (P50) lost until ${fmtDayTime(end)}.`} className="lg:col-span-6">
+      <Section title="Cumulative loss" description={`Expected energy (P50) lost until ${fmtDayTime(end)}${cases.length > 1 ? ', per target' : ''}.`} className="lg:col-span-6">
         <Chart option={cumulative} className="h-chart-sm" />
       </Section>
-      <Section title="Loss per hour" description="Expected energy (P50) lost in each clock hour of the outage." className="lg:col-span-6">
+      <Section
+        title="Loss per hour"
+        description={`Expected energy (P50) lost in each clock hour of the outage${cases.length > 1 ? ', the targets stacked' : ''}.`}
+        className="lg:col-span-6"
+      >
         <Chart option={bars} className="h-chart-sm" />
       </Section>
     </>

@@ -2,7 +2,7 @@ import { Check, Copy, Download, FileText, LoaderCircle, Mail, Share } from 'luci
 import { observer } from 'mobx-react-lite'
 import { useEffect, useState } from 'react'
 import { AnalysisState } from '@/components/AnalysisState'
-import { fmtAmount, fmtDateTime, fmtDuration, fmtNum, fmtPct, fmtSpan, HOUR, isoBerlin, STEP_MS, toLocalInput } from '@/components/format'
+import { fmtAmount, fmtDateTime, fmtDuration, fmtNum, fmtPct, HOUR, isoBerlin, STEP_MS, toLocalInput } from '@/components/format'
 import {
   BAND_HINT,
   calculating,
@@ -19,10 +19,9 @@ import {
 import { Section } from '@/components/Section'
 import { Button } from '@/components/ui/button'
 import { Notice } from '@/components/Notice'
-import { plausibility, type Dataset, type Span, type Warning } from '@/data'
+import { type Dataset, type Span, type Warning } from '@/data'
 import type { AnalyzeResponse } from '@/engine'
 import { store } from '@/state/store'
-import { TotalCard } from '@/steps/ResultsStep'
 
 const COLUMNS = ['time_berlin', 'time_utc', 'wind_mean_ms', 'wind_q10_ms', 'wind_q90_ms', 'power_mean_kw', 'energy_kwh', 'cumulative_kwh']
 
@@ -100,23 +99,28 @@ function emailDraft(dataset: Dataset, outage: Span, model: string, response: Ana
   return { subject, body }
 }
 
-/** The email for every target at once: one line per target, the P50 total, and per target its references, backtest and data notes. */
-function totalEmailDraft(cases: Case[], model: string) {
+/** The email for every target at once: the shared outage, one line per target, the P50 total, and per target its references
+ * and backtest. */
+function totalEmailDraft(cases: Case[], outage: Span, model: string, warnings: Warning[]) {
   const done = cases.filter((c) => c.response) as Required<Case>[]
   const ids = cases.map((c) => c.id).join(', ')
   const perTarget = (title: string, lines: (c: Required<Case>) => string[]) =>
     [title, ...done.flatMap((c) => lines(c).map((line, i) => (i ? `  – ${line}` : `• ${c.id}: ${line}`)))].join('\n')
-  const notes = done.flatMap((c) => plausibility(c.dataset, c.outage, c.response.explanation.diagnostics.r).map((w) => `• ${c.id}: ${w.title}. ${w.detail}`))
-  const subject = `Energy loss estimate – targets ${ids}`
+  const subject = `Energy loss estimate – targets ${ids} – outage of ${fmtDateTime(outage.startMs)}`
   const body = [
     'Dear Sir/Madam,',
-    `Please find below our estimate of the energy lost during the outages of targets ${ids}. Attached is the report (PDF) with charts, method and accuracy for each target.`,
+    `Please find below our estimate of the energy lost during the outage of targets ${ids}. Attached are the report (PDF) with charts, method and accuracy for each target, and the prediction as a CSV file with 10-minute values in Europe/Berlin and UTC time.`,
     [
-      'Lost energy (Europe/Berlin)',
+      'Outage',
+      `• Period: ${fmtDateTime(outage.startMs)} – ${fmtDateTime(outage.endMs)} (Europe/Berlin)`,
+      `• Duration: ${fmtDuration(outage.endMs - outage.startMs)}`,
+    ].join('\n'),
+    [
+      'Lost energy',
       ...cases.map((c) => {
         const e = c.response?.energy
         return e
-          ? `• ${c.id}: ${fmtSpan(c.outage!)} (${fmtDuration(c.outage!.endMs - c.outage!.startMs)}), most likely ${fmtAmount(e.kwhP50)} kWh, 80 % range ${fmtAmount(e.kwhP10)} – ${fmtAmount(e.kwhP90)} kWh`
+          ? `• ${c.id} (${farmText(c.dataset!)}): most likely ${fmtAmount(e.kwhP50)} kWh, 80 % range ${fmtAmount(e.kwhP10)} – ${fmtAmount(e.kwhP90)} kWh`
           : `• ${c.id}: ${missing(c)}`
       }),
       ...(done.length > 1 ? [`${totalText(done.length, cases.length)} (P50): ${fmtAmount(done.reduce((sum, c) => sum + c.response.energy.kwhP50, 0))} kWh. ${TOTAL_HINT}`] : []),
@@ -131,7 +135,7 @@ function totalEmailDraft(cases: Case[], model: string) {
         ? [`backtest on ${fmtNum(c.response.validation.n_folds)} simulated outages of the same length.`, ...accuracy]
         : ['not enough data before the outage for a backtest.']
     }),
-    notes.length > 0 && ['Data notes', ...notes].join('\n'),
+    warnings.length > 0 && ['Data notes', ...warnings.map((w) => `• ${w.title}. ${w.detail}`)].join('\n'),
     'Kind regards',
     done[0] && `—\nCalculated with ${toolText(done[0].response)}`,
   ]
@@ -141,36 +145,29 @@ function totalEmailDraft(cases: Case[], model: string) {
 }
 
 export const ExportStep = observer(function ExportStep() {
-  const { dataset, outage, model, response, warnings } = store
-  if (store.showsTotal) {
-    const { subject, body } = totalEmailDraft(store.cases, store.label(model))
-    return (
-      <div className="flex flex-col gap-section">
-        <ReportCard title={subject} text={body} />
-        <TotalCard />
-        <EmailCard subject={subject} body={body} attach="Attach the PDF report." />
-      </div>
-    )
-  }
-  if (!dataset || !outage || !response) return <AnalysisState />
-  const rows = predictionRows(response)
-  const csv = [COLUMNS, ...rows].map((r) => r.join(',')).join('\n') + '\n'
-  const file = `windgap_${dataset.target.id}_${toLocalInput(outage.startMs).replace(/\D/g, '').slice(0, 12)}.csv`
-  const { subject, body } = emailDraft(dataset, outage, store.label(model), response, warnings)
+  const { dataset, outage, model, response, warnings, calculated, showsTotal } = store
+  if (!dataset || !outage || !calculated.length || (!showsTotal && !response)) return <AnalysisState />
+  const columns = showsTotal ? ['target', ...COLUMNS] : COLUMNS
+  const rows = calculated.flatMap((c) => predictionRows(c.response).map((r) => (showsTotal ? [c.id, ...r] : r)))
+  const csv = [columns, ...rows].map((r) => r.join(',')).join('\n') + '\n'
+  const file = `windgap_${showsTotal ? 'total' : dataset.target.id}_${toLocalInput(outage.startMs).replace(/\D/g, '').slice(0, 12)}.csv`
+  const { subject, body } = showsTotal
+    ? totalEmailDraft(store.cases, outage, store.label(model), warnings)
+    : emailDraft(dataset, outage, store.label(model), response!, warnings)
   return (
     <div className="grid gap-section lg:grid-cols-2">
       <ReportCard title={subject} text={body} csv={new File([csv], file, { type: 'text/csv' })} />
       <EmailCard subject={subject} body={body} />
       <Section
         title="Prediction with uncertainty and energy"
-        description={`${fmtNum(rows.length)} rows of 10 minutes: wind in m/s (mean, 10 % and 90 % quantile), expected farm power in kW, energy in kWh.`}
+        description={`${fmtNum(rows.length)} rows of 10 minutes${showsTotal ? `, one block per target (${calculated.map((c) => c.id).join(', ')})` : ''}: wind in m/s (mean, 10 % and 90 % quantile), expected farm power in kW, energy in kWh.`}
         action={
           <Button onClick={() => download(file, csv)}>
             <Download /> Download CSV
           </Button>
         }
       >
-        <Table columns={COLUMNS} rows={rows.slice(0, 6)} />
+        <Table columns={columns} rows={rows.slice(0, 6)} />
         <p className="text-label text-muted-foreground">
           {file} · first 6 of {fmtNum(rows.length)} rows
         </p>
@@ -194,7 +191,7 @@ function Table({ columns, rows }: { columns: string[]; rows: string[][] }) {
         </thead>
         <tbody>
           {rows.map((r) => (
-            <tr key={r[0]} className="border-t">
+            <tr key={r.slice(0, 2).join()} className="border-t">
               {r.map((cell, i) => (
                 <td key={i} className="px-2 py-1 whitespace-nowrap">
                   {cell}
@@ -215,14 +212,14 @@ let madeReport: { key: unknown[]; file: File } | undefined
 
 const ReportCard = observer(function ReportCard({ title, text, csv }: { title: string; text?: string; csv?: File }) {
   const { reportCases: cases, model, stations, files } = store
-  const { outages, resultsByTarget, failuresByTarget, curveChoice, nTurbines } = store
+  const { outage, resultsByTarget, failuresByTarget, curveChoice, nTurbines } = store
   const pending = cases.filter(calculating)
   const left = cases.filter((c) => !c.response && !calculating(c))
   const [pdf, setPdf] = useState<{ file: File } | { error: string }>()
   const [shareError, setShareError] = useState<string>()
   useEffect(() => {
     // The inputs are immutable store state, so a report stays valid while they are the same objects: reopening the step costs nothing.
-    const key = [files, stations, curveChoice, nTurbines, outages, resultsByTarget, failuresByTarget, model, cases.map((c) => c.id).join()]
+    const key = [files, stations, curveChoice, nTurbines, outage, resultsByTarget, failuresByTarget, model, cases.map((c) => c.id).join()]
     if (madeReport?.key.every((k, i) => k === key[i])) {
       setPdf({ file: madeReport.file })
       return
@@ -256,7 +253,7 @@ const ReportCard = observer(function ReportCard({ title, text, csv }: { title: s
       current = false
       clearTimeout(start)
     }
-  }, [cases, model, stations, files, outages, resultsByTarget, failuresByTarget, curveChoice, nTurbines, pending.length])
+  }, [cases, model, stations, files, outage, resultsByTarget, failuresByTarget, curveChoice, nTurbines, pending.length])
   const file = pdf && 'file' in pdf ? pdf.file : undefined
   const attached = (file: File) => (csv ? [file, csv] : [file])
   const share = (file: File) => {
@@ -304,7 +301,7 @@ const ReportCard = observer(function ReportCard({ title, text, csv }: { title: s
   )
 })
 
-function EmailCard({ subject, body, attach = 'Attach the PDF report and the CSV.' }: { subject: string; body: string; attach?: string }) {
+function EmailCard({ subject, body }: { subject: string; body: string }) {
   const [copied, setCopied] = useState(false)
   const copy = async () => {
     await navigator.clipboard.writeText(`Subject: ${subject}\n\n${body}`)
@@ -315,7 +312,7 @@ function EmailCard({ subject, body, attach = 'Attach the PDF report and the CSV.
     <Section
       title="Email to the insurer"
       className="lg:row-span-2"
-      description={`A draft with period, method, lost energy, accuracy and data checks. ${attach}`}
+      description="A draft with period, method, lost energy, accuracy and data checks. Attach the PDF report and the CSV."
       action={
         <div className="flex gap-2">
           <Button variant="outline" asChild>

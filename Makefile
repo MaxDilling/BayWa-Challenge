@@ -42,7 +42,7 @@ dwd:
 dwd-refs:
 	uv run python -m harness.dwd refs
 
-# <name>.csv next to every .xlsx in XLSX (default: the challenge data), readable by the import
+# XLSX/csv/<name>.csv for every .xlsx in XLSX (default: the challenge data), readable by the import
 XLSX ?= data/data_hackathon_baywa_re
 csv:
 	uv run python -m harness.xlsx $(XLSX)

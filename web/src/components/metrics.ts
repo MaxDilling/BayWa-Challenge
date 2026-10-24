@@ -99,7 +99,7 @@ export function referenceRoles(references: WindSeries[], { params: p, diagnostic
   })
 }
 
-/** "the neighbouring reference farm H1 (chosen from …)": the references the prediction rests on, in one phrase. */
+/** "the neighbouring reference farm H1. It was chosen from …": the references the prediction rests on, without the final full stop. */
 export function referenceText(references: WindSeries[], explanation: Explanation) {
   const roles = referenceRoles(references, explanation)
   const used = roles.filter((x) => x.used)
@@ -108,7 +108,7 @@ export function referenceText(references: WindSeries[], explanation: Explanation
     return `the reference farm${used.length > 1 ? 's' : ''} ${used.map((x) => `${x.id} (${x.role})`).join(', ')}, weighted by least squares${others.length ? `; ${others.join(', ')} got weight 0` : ''}`
   if (!others.length) return `the neighbouring reference farm ${used[0].id}`
   const d = explanation.diagnostics
-  return `the neighbouring reference farm ${used[0].id} (chosen from ${roles.length} farms because it tracked the target best before the outage, r = ${fmtNum(d[`r_ref_${d.reference_index}`], 3)}; not used: ${others.join(', ')})`
+  return `the neighbouring reference farm ${used[0].id} ${'.'} It was chosen from ${roles.length} farms because it tracked the target best before the outage (r = ${fmtNum(d[`r_ref_${d.reference_index}`], 3)}); not used: ${others.join(', ')}`
 }
 
 const COMPASS = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE', 'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW']

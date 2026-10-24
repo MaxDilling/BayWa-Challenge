@@ -18,7 +18,7 @@ import { UploadStep } from '@/steps/UploadStep'
 const STEP_INFO: Record<Step, { label: string; sentence: string; View: () => ReactNode }> = {
   upload: {
     label: 'Upload',
-    sentence: 'Add the 10-minute wind series of the affected farm and of one or more reference farms, plus the turbine power curve.',
+    sentence: 'Add the 10-minute wind series of the affected farm, one or more reference farms, plus the turbine power curve.',
     View: UploadStep,
   },
   outage: {

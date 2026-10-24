@@ -10,7 +10,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { assignFiles, loadDemo, parsePowerCurveCsv, parseWindCsv, turbineCount, type PowerCurve, type WindSeries } from '@/data'
+import { assignFiles, KNOWN_CURVES, loadDemo, parsePowerCurveCsv, parseWindCsv, turbineCount, type PowerCurve, type WindSeries } from '@/data'
 import { cn } from '@/lib/utils'
 import { store } from '@/state/store'
 
@@ -104,8 +104,22 @@ const AllFiles = observer(function AllFiles() {
           </p>
         )
       )}
+      <KnownCurves />
       {store.powerCurve && <TurbineDecision />}
     </Section>
+  )
+})
+
+const KnownCurves = observer(function KnownCurves() {
+  return (
+    <div className="flex flex-wrap items-center gap-2 text-label">
+      <span className="text-muted-foreground">No power curve file? Use the published curve of</span>
+      {KNOWN_CURVES.map(({ name, curve }) => (
+        <Button key={name} size="sm" variant={store.powerCurve === curve ? 'default' : 'outline'} onClick={() => store.setPowerCurve(curve)}>
+          {name}
+        </Button>
+      ))}
+    </div>
   )
 })
 
@@ -155,7 +169,7 @@ const AssignmentView = observer(function AssignmentView() {
               <Check /> found
             </Badge>
           ) : (
-            <span className="text-muted-foreground">{powerCurve ? 'kept from before' : 'not among the files; add it below'}</span>
+            <span className="text-muted-foreground">{powerCurve ? 'kept from before' : 'not among the files; pick a turbine or add it below'}</span>
           )}
         </li>
       </ul>

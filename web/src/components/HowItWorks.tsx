@@ -25,10 +25,10 @@ const STEPS: { title: string; task: string; body: ReactNode; tex?: string; legen
     task: 'Learn how the wind at both farms is related, from the data before the outage.',
     tex: String.raw`\hat{v}_t = a + b \cdot v_r(t - \tau)`,
     legend: [
-      [String.raw`\hat{v}_t`, 'predicted wind speed at the target farm at time t (m/s)'],
-      [String.raw`v_r(t)`, 'measured wind speed at the reference farm at time t (m/s)'],
-      [String.raw`a, b`, 'intercept (m/s) and slope of the fitted line'],
-      [String.raw`\tau`, 'delay between the two farms (min)'],
+      [String.raw`\hat{v}_t`, 'predicted target wind'],
+      [String.raw`v_r`, 'reference wind'],
+      [String.raw`a, b`, 'intercept and slope'],
+      [String.raw`\tau`, 'delay'],
     ],
     body: (
       <>
@@ -54,11 +54,11 @@ const STEPS: { title: string; task: string; body: ReactNode; tex?: string; legen
     task: 'Turn the predicted wind into lost energy with the power curve.',
     tex: String.raw`\hat{P}_t = \mathbb{E}\left[P(v)\right], \quad v \sim \mathcal{N}(\hat{v}_t, \sigma_t^2)`,
     legend: [
-      [String.raw`\hat{P}_t`, 'expected power of one turbine at time t (kW)'],
-      [String.raw`P(v)`, 'power curve: power at wind speed v (kW)'],
-      [String.raw`\mathbb{E}[\cdot]`, 'expected value: the average over all likely wind speeds'],
-      [String.raw`\mathcal{N}(\hat{v}_t, \sigma_t^2)`, 'normal distribution around the predicted wind'],
-      [String.raw`\sigma_t`, 'standard deviation of the prediction error at time t (m/s), the one that sets the 80 % band'],
+      [String.raw`\hat{P}_t`, 'expected power'],
+      [String.raw`P(v)`, 'power curve'],
+      [String.raw`\mathbb{E}`, 'expected value'],
+      [String.raw`\mathcal{N}`, 'normal distribution'],
+      [String.raw`\sigma_t`, 'prediction error spread'],
     ],
     body: (
       <>
@@ -97,18 +97,22 @@ export const HowItWorks = observer(function HowItWorks() {
                 {title}: <span className="font-normal text-muted-foreground">{task}</span>
               </p>
               <div className="col-start-2 flex flex-col gap-2 text-pretty">
-                {tex && <Formula tex={tex} />}
-                {legend && (
-                  <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-label text-muted-foreground">
-                    {legend.map(([symbol, meaning]) => (
-                      <div key={symbol} className="contents">
-                        <dt className="text-body text-foreground">
-                          <Formula tex={symbol} inline />
-                        </dt>
-                        <dd>{meaning}</dd>
-                      </div>
-                    ))}
-                  </dl>
+                {tex && (
+                  <div className="flex flex-wrap items-center gap-x-6 gap-y-2 [&_math]:text-left">
+                    <Formula tex={tex} />
+                    {legend && (
+                      <dl className="grid grid-cols-[auto_1fr] gap-x-2 text-label text-muted-foreground">
+                        {legend.map(([symbol, meaning]) => (
+                          <div key={symbol} className="contents">
+                            <dt className="text-body text-foreground">
+                              <Formula tex={symbol} inline />
+                            </dt>
+                            <dd className="self-center">{meaning}</dd>
+                          </div>
+                        ))}
+                      </dl>
+                    )}
+                  </div>
                 )}
                 <p>{body}</p>
               </div>

@@ -9,7 +9,6 @@ import { readTheme } from '@/components/charts/theme'
 import { fmtAmount, fmtDateTimeZone, fmtDuration, fmtNum, fmtSpanZone } from '@/components/format'
 import {
   compass,
-  densityText,
   farmText,
   missing,
   referenceRoles,
@@ -46,6 +45,23 @@ const MM_PER_PT = 25.4 / 72
 const LOGO_MM = { width: 45, height: (45 * 77) / 320 }
 const LEADING = 1.35
 const GAP = 6
+const SUB: Record<string, string> = { t: 'ₜ', r: 'ᵣ', i: 'ᵢ', s: 'ₛ', '(': '₍', ')': '₎', ',': ',' }
+
+/** The engine's LaTeX formula as text with Unicode subscripts; a command our models do not use throws. */
+export function formulaText(tex: string) {
+  return tex.replace(/\\hat\{(\w)\}|\\(cdot|tau|sum|Big)(?![a-zA-Z])|_\{([^}]*)\}|_(\w)|\\[a-zA-Z]+|-/g, (match, hat, command, group, single) => {
+    if (hat) return `${hat}̂`
+    if (command) return { cdot: '·', tau: 'τ', sum: 'Σ', Big: '' }[command as string]!
+    if (match === '-') return '−'
+    if (group === undefined && single === undefined) throw new Error(`The PDF report cannot write ${match} in ${tex}`)
+    return [...((group ?? single) as string)]
+      .map((c) => {
+        if (!(c in SUB)) throw new Error(`The PDF report has no subscript ${c} for ${tex}`)
+        return SUB[c]
+      })
+      .join('')
+  })
+}
 
 /** The tokens of index.css under the forced light scheme. */
 function lightTokens() {
@@ -158,6 +174,22 @@ class Writer {
     this.y += height
   }
 
+  /** One line of formula; jsPDF does not place combining marks, so each is drawn back over the letter before it. */
+  formula(text: string) {
+    const height = this.line(this.s.title)
+    this.fits(height)
+    if (!this.dry) {
+      this.style(this.s.title)
+      let x = this.x
+      for (const [, base, mark] of text.matchAll(/([^\u0302]+)(\u0302?)/g)) {
+        this.doc.text(base, x, this.y, { baseline: 'top' })
+        x += this.doc.getTextWidth(base)
+        if (mark) this.doc.text(mark, x - this.doc.getTextWidth(base.at(-1)!), this.y, { baseline: 'top' })
+      }
+    }
+    this.y += height + 1.5
+  }
+
   rule() {
     if (!this.dry) this.doc.setDrawColor(this.s.border).setLineWidth(0.2).line(this.x, this.y, this.x + this.width, this.y)
     this.y += 0.8
@@ -237,11 +269,6 @@ export function reportPdf(input: ReportInput): Blob {
     },
     () => {
       w.text('Energy Loss Estimate', { size: s.heading, bold: true, gap: 0.5 })
-      w.text('The energy the turbines could not produce during the outage, with its uncertainty. Please retain for your records.', {
-        size: s.label,
-        color: s.muted,
-        gap: 2,
-      })
       w.text(targets, { size: s.title, bold: true, gap: 0 })
       const outage = input.cases.find((c) => c.outage)?.outage
       if (outage) w.text(`Outage period: ${fmtSpanZone(outage)}`, { bold: true })
@@ -252,16 +279,16 @@ export function reportPdf(input: ReportInput): Blob {
   overview(w, input, done)
   done.forEach((c, i) => {
     if (i) w.newPage()
-    else w.y += 14
+    else w.y += 6
     target(w, c, input, chart)
   })
-  w.y += 14
+  w.newPage()
   done.forEach((c, i) =>
     i
       ? derivation(w, c, input)
       : w.keep(() => {
           w.text('How the figures were derived', { size: s.heading, bold: true })
-          w.text('Step by step from the wind to the lost energy, for each target. Rows 3 and 4 add up to row 5.', { color: s.muted })
+          w.text('Step by step from the wind to the lost energy, for each target.', { color: s.muted })
           derivation(w, c, input)
         }),
   )
@@ -330,9 +357,9 @@ function target(w: Writer, c: Required<Case>, input: ReportInput, chart: ChartTh
     [[{ text: fmtSpanZone(outage) }, { text: fmtDuration(outage.endMs - outage.startMs) }, { text: farmText(dataset) }, { text: c.curve }]],
   )
   w.table(
-    [30, 62],
-    ['Reference', 'Role in the model', 'Source'],
-    roles.map((r) => [{ text: r.id }, { text: r.role }, { text: input.stations.includes(r.id) ? 'DWD weather station' : 'Uploaded series' }]),
+    [30],
+    ['Reference', 'Source'],
+    roles.map((r) => [{ text: r.id }, { text: input.stations.includes(r.id) ? 'DWD weather station' : 'Uploaded series' }]),
   )
   const used = { ...dataset, references: dataset.references.filter((_, i) => roles[i].used) }
   const wind = chartImage({ ...windOption([{ ...c, dataset: used }], outage, chart), grid: {} }, chart, chart.print.height)
@@ -363,7 +390,6 @@ function target(w: Writer, c: Required<Case>, input: ReportInput, chart: ChartTh
       w.image(cumulative, half)
     },
   )
-  w.text(densityText(energy), { color: s.muted })
 
   const weights = sectorWeights(dataset.references, explanation)
   if (weights.sectors.length)
@@ -416,15 +442,15 @@ function derivation(w: Writer, c: Required<Case>, input: ReportInput) {
       { text: `${signed(delta, fmtAmount(Math.abs(delta)))} kWh${pct}`, align: 'right' },
     ]
   }
-  const rows: Cell[][] = [
+  const numbered: Cell[][] = [
     [
-      { text: '1' },
+      { text: '' },
       { text: 'Outage' },
       { text: `${fmtNum(prediction.mean.length)} steps of 10 minutes, ${fmtSpanZone(outage)}` },
       { text: fmtDuration(outage.endMs - outage.startMs), align: 'right' },
     ],
     [
-      { text: '2' },
+      { text: '' },
       { text: 'Predicted wind' },
       { text: `Mean of the predicted 10-minute wind speeds at the target, from the references by ${input.method}.` },
       { text: `${fmtNum(meanWind, 2)} m/s`, align: 'right' },
@@ -433,15 +459,15 @@ function derivation(w: Writer, c: Required<Case>, input: ReportInput) {
       ? []
       : [
           [
-            { text: '3' },
+            { text: '' },
             { text: 'From the references alone' },
             { text: `Lost energy of ${farmText(dataset)} with the ${c.curve} power curve, if the wind direction were unknown.` },
             kwh(plain),
           ],
         ]),
-    [{ text: '4' }, { text: 'Effect of the location' }, ...location()],
+    [{ text: '' }, { text: 'Effect of the location' }, ...location()],
     [
-      { text: '5', bold: true },
+      { text: '', bold: true },
       { text: 'Lost energy P50', bold: true },
       {
         text:
@@ -452,7 +478,7 @@ function derivation(w: Writer, c: Required<Case>, input: ReportInput) {
       { ...kwh(energy.kwhP50), bold: true },
     ],
     [
-      { text: '6' },
+      { text: '' },
       { text: 'Range P10–P90' },
       {
         text:
@@ -462,6 +488,7 @@ function derivation(w: Writer, c: Required<Case>, input: ReportInput) {
       { text: `${fmtAmount(energy.kwhP10)}–${fmtAmount(energy.kwhP90)} kWh`, align: 'right' },
     ],
   ]
+  const rows = numbered.map((row, i) => [{ ...row[0], text: String(i + 1) }, ...row.slice(1)])
   w.title(`Target ${c.id}`)
   w.table([8, 34, w.width - 8 - 34 - 34], ['', 'Step', 'How', 'Value'], rows)
 }
@@ -478,7 +505,6 @@ function assumptions(w: Writer, input: ReportInput, done: Required<Case>[], tool
     stations.length && `DWD weather stations (${stations.join(', ')})`,
   ].filter(Boolean)
   const items = [
-    `Method: ${input.method}. ${input.tagline}`,
     `The wind at the target was not measured during the outage. It was simulated from the wind measured at the same time by ${sources.join(' and ')}, ` +
       'whose relation to the target the model learned before the outage.',
     'All times are local time in Germany (Europe/Berlin, CET or CEST as marked); the CSV exports also carry UTC.',
@@ -493,6 +519,16 @@ function assumptions(w: Writer, input: ReportInput, done: Required<Case>[], tool
         : '.'),
     ...(tool ? [`Calculated with ${tool}.`] : []),
   ]
+  w.title(`Method: ${input.method}`)
+  w.text(input.tagline, { gap: 1.5 })
+  for (const c of done) {
+    const { explanation } = c.response
+    w.keep(() => {
+      w.text(`Target ${c.id}`, { gap: 0.5 })
+      w.formula(formulaText(explanation.formula))
+      w.text(explanation.summary, { gap: 2 })
+    })
+  }
   w.title('Assumptions and limits')
   for (const item of items) {
     w.row([{ text: '•', width: 5 }, { text: item }])

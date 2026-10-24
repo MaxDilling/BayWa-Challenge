@@ -241,7 +241,7 @@ export function windOption(cases: Shown[], outage: Span, t: ChartTheme) {
         data: gridPoints(dataset.target.grid, from, to),
         lineStyle: { color: t.measured, width: t.lineThin, type: dash(k) },
         itemStyle: { color: t.measured },
-        ...(k === 0 && { markArea: { silent: true, itemStyle: { color: t.outage }, data: [[{ xAxis: outage.startMs }, { xAxis: outage.endMs }]] } }),
+        ...(k === 0 && { markArea: { silent: true, itemStyle: { color: t.outage, opacity: 0.6 }, data: [[{ xAxis: outage.startMs }, { xAxis: outage.endMs }]] } }),
       })),
       ...refs.map((r, i) => ({
         id: `ref-${i}`,

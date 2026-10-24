@@ -99,7 +99,7 @@
     --series-prediction: var(--brand-600);
     --series-band: var(--brand-400);
     --series-outage: var(--amber-100);
-    --series-outage-edge: var(--amber-500);
+    --series-outage-edge: var(--amber-600);
     --series-gap: var(--neutral-200);
     --series-energy: var(--amber-500);
 
@@ -126,7 +126,7 @@
     --pdf-margin: 15;
 
     /* Shape */
-    --radius: 0.0rem;
+    --radius: 0.5rem;
     --shadow-card-value: 0 1px 2px 0 color-mix(in srgb, var(--neutral-900) 6%, transparent);
     --shadow-raised-value: 0 4px 16px -4px color-mix(in srgb, var(--neutral-900) 14%, transparent);
 

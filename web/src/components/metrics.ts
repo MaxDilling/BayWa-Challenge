@@ -1,6 +1,6 @@
 // Words for the engine's numbers: validation keys, parameters, references, the backtest verdict and the energy headline,
 // shared by Method, Results, Export and the report.
-import { fmtAmount, fmtDuration, fmtNum, fmtPct, STEP_MS } from '@/components/format'
+import { fmtAmount, fmtDuration, fmtNum, fmtPct } from '@/components/format'
 import type { Dataset, Span, WindSeries } from '@/data'
 import type { AnalyzeResponse } from '@/engine'
 
@@ -166,10 +166,6 @@ export function wakeText(sectors: ReturnType<typeof wakeSectors>) {
     'are pulled towards 0 %.'
   )
 }
-
-/** Days of target data outside the outage that the model could learn from. */
-export const trainingDays = ({ target }: Dataset, outage: Span) =>
-  (target.grid.values.length * STEP_MS - (outage.endMs - outage.startMs)) / 86_400_000
 
 /** "Wind Outage Tool, windgap 0.4.0 (TypeScript engine)" */
 export const toolText = ({ engine }: AnalyzeResponse) =>

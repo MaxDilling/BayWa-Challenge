@@ -1,5 +1,6 @@
 // Screenshots of every GUI step for review: desktop, mobile, dark, an upload error, all demo files dropped at once,
-// data that triggers plausibility warnings, the method sheet and the py engine.
+// data that triggers plausibility warnings, the method sheet, the py engine and the PDF report (demo, dark, and the challenge
+// data with three targets when data/data_hackathon_baywa_re/ is there).
 // Usage (after make build): node web/scripts/screenshots.mjs [outDir]. Exits 1 on any console error.
 // Without outDir each run gets the next screenshots/v<n> and a taken.json with every image's hash, so that
 // scripts/annotated.mjs finds the images the team drew on later.
@@ -42,6 +43,15 @@ async function shot(page, file) {
   shots.push(file)
 }
 
+/** The report as "Save as PDF" would write it; window.print only marks that the report is ready. */
+async function report(page, file) {
+  await page.evaluate(() => (window.print = () => (document.body.dataset.printed = 'yes')))
+  await page.getByRole('button', { name: 'Download report (PDF)' }).click()
+  await page.locator('body[data-printed]').waitFor({ state: 'attached', timeout: 60_000 })
+  await page.pdf({ path: join(out, file), preferCSSPageSize: true })
+  shots.push(file)
+}
+
 async function walk(name, page) {
   await page.getByRole('button', { name: 'Load demo data' }).click()
   await page.getByText('kWh lost').waitFor({ state: 'attached' })
@@ -49,6 +59,7 @@ async function walk(name, page) {
     await page.locator('nav[aria-label=Steps] button').nth(i).click()
     await shot(page, `${name}-${i + 1}-${step}.png`)
   }
+  await report(page, `${name}-report.pdf`)
 }
 
 async function variant(name, url, viewport, prepare = async () => {}) {
@@ -101,6 +112,19 @@ await shot(pool, 'references-3-method.png')
 await pool.close()
 rmSync(scratch, { recursive: true })
 
+// All ten turbine files of the challenge with one power curve: T1–T3 become targets, the report has a page for each.
+const challenge = join(root, 'data/data_hackathon_baywa_re')
+if (existsSync(challenge)) {
+  const page = await open('challenge', single, DESKTOP)
+  const files = readdirSync(challenge).filter((f) => /_data\.xlsx$|^T1_power_curve\.xlsx$/.test(f))
+  await page.locator('input[type=file]').first().setInputFiles(files.map((f) => join(challenge, f)))
+  await page.getByText('kWh lost').waitFor({ state: 'attached', timeout: 60_000 })
+  await page.locator('nav[aria-label=Steps] button').nth(4).click()
+  await shot(page, 'challenge-5-export.png')
+  await report(page, 'challenge-report.pdf')
+  await page.close()
+}
+
 await variant('desktop', single, DESKTOP)
 await variant('mobile', single, MOBILE)
 await variant('dark', single, DESKTOP, (page) => page.getByRole('button', { name: 'Dark mode' }).click())
@@ -123,6 +147,8 @@ try {
   await page.getByText('kWh lost').waitFor({ state: 'attached', timeout: 60_000 })
   await page.locator('nav[aria-label=Steps] button').nth(3).click()
   await shot(page, 'py-4-results.png')
+  await page.locator('nav[aria-label=Steps] button').nth(4).click()
+  await report(page, 'py-report.pdf')
   await page.close()
 } finally {
   server.kill()

@@ -1,7 +1,7 @@
 import { readdirSync, readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { analyze } from '@/engine/ts/tsEngine'
-import { assignFiles, buildDataset, filledTargetCsv, loadDemo, parsePowerCurveCsv, parseWindCsv, plausibility, toRequest, turbineCount } from '.'
+import { assignFiles, buildDataset, DEMO_FILES, filledTargetCsv, parsePowerCurveCsv, parseWindCsv, plausibility, toRequest, turbineCount } from '.'
 import { isSummerTime } from './berlin'
 import { detectOutages } from './outage'
 import { xlsxTexts } from './xlsx'
@@ -60,6 +60,13 @@ describe('power curve', () => {
     expect(turbineCount('WTG01_curve', 'v;p\n3;0\n12;3000')).toBeUndefined()
   })
 })
+
+/** The demo as the GUI assigns it after "Load demo data". */
+function loadDemo() {
+  const { series, targets, powerCurve } = assignFiles(DEMO_FILES)
+  expect(targets).toEqual(['demo_target'])
+  return buildDataset(series.find((s) => s.id === 'demo_target')!, series.filter((s) => s.id !== 'demo_target'), powerCurve!)
+}
 
 describe('demo data', () => {
   it('flows from CSV through outage detection into the ts engine', () => {

@@ -25,10 +25,13 @@ export interface ChartTheme {
   point: number
   label: number
   font: string
+  /** Print size of report charts: width, heights and pixel ratio. */
+  print: { width: number; height: number; heightSm: number; scale: number }
 }
 
-function readTheme(): ChartTheme {
-  const css = getComputedStyle(document.documentElement)
+/** The tokens as they apply at `el`: the page's, or the report's forced light scheme. */
+export function readTheme(el = document.documentElement): ChartTheme {
+  const css = getComputedStyle(el)
   const token = (name: string) => css.getPropertyValue(`--${name}`).trim()
   const number = (name: string) => parseFloat(token(name))
   return {
@@ -53,6 +56,7 @@ function readTheme(): ChartTheme {
     point: number('chart-point'),
     label: number('size-label') * parseFloat(css.fontSize),
     font: token('font-body'),
+    print: { width: number('print-chart-width'), height: number('print-chart-height'), heightSm: number('print-chart-height-sm'), scale: number('print-chart-scale') },
   }
 }
 

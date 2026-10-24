@@ -28,6 +28,15 @@ use([
 
 export type { ChartTheme }
 
+/** A chart as a PNG for print, drawn off screen (at the print width unless given) without animation, tooltip or zoom. */
+export function chartImage(option: EChartsCoreOption, theme: ChartTheme, height: number, width = theme.print.width): string {
+  const chart = init(document.createElement('div'), echartsTheme(theme), { width, height, devicePixelRatio: theme.print.scale })
+  chart.setOption({ ...option, animation: false, tooltip: undefined, dataZoom: [] })
+  const url = chart.getDataURL({ type: 'png' })
+  chart.dispose()
+  return url
+}
+
 interface Props {
   /** Builds the option from the token theme; keep it referentially stable (useCallback). */
   option: (theme: ChartTheme) => EChartsCoreOption

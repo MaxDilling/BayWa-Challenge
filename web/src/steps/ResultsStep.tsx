@@ -5,7 +5,7 @@ import { Chart, type ChartTheme } from '@/components/charts/Chart'
 import { byId, gridPoints, tooltipHtml } from '@/components/charts/series'
 import { fmtAmount, fmtAxisTime, fmtDayTime, fmtDuration, fmtNum, fmtPct, fmtSpan, HOUR, STEP_MS } from '@/components/format'
 import { Hint } from '@/components/Hint'
-import { BAND_HINT, farmText, METRICS, rangeText, verdict } from '@/components/metrics'
+import { ACCURACY, BAND_HINT, farmText, rangeText, verdict } from '@/components/metrics'
 import { Notice } from '@/components/Notice'
 import { Section } from '@/components/Section'
 import { Warnings, WarningSummary } from '@/components/Warnings'
@@ -74,8 +74,6 @@ function EnergyCard({ response, outage, dataset }: { response: AnalyzeResponse; 
   )
 }
 
-const CARDS = ['energy_wape_pct', 'wind_rmse', 'wind_mae', 'power_rmse', 'coverage_80', 'bias'].map((key) => METRICS[key])
-
 function AccuracyCard({ validation, outage, farmKw }: { validation: Record<string, number>; outage: Span; farmKw: number }) {
   const folds = validation.n_folds
   const sentence = verdict(validation, outage.endMs - outage.startMs)
@@ -89,7 +87,7 @@ function AccuracyCard({ validation, outage, farmKw }: { validation: Record<strin
         <>
           {sentence && <p className="text-pretty">{sentence}</p>}
           <dl className="grid grid-cols-2 gap-3 md:grid-cols-3">
-            {CARDS.map((m) => (
+            {ACCURACY.map((m) => (
               <div key={m.key} className="rounded-lg bg-muted px-3 py-2.5">
                 <dt className="text-label text-muted-foreground">
                   <Hint label={m.label}>{m.hint}</Hint>
@@ -111,7 +109,7 @@ function AccuracyCard({ validation, outage, farmKw }: { validation: Record<strin
   )
 }
 
-function windOption(dataset: Dataset, response: AnalyzeResponse, outage: Span, t: ChartTheme) {
+export function windOption(dataset: Dataset, response: AnalyzeResponse, outage: Span, t: ChartTheme) {
   const length = outage.endMs - outage.startMs
   const pad = Math.min(Math.max(length, 12 * HOUR), 72 * HOUR)
   const [from, to] = [outage.startMs - pad, outage.endMs + pad]
@@ -216,7 +214,7 @@ function hourly(response: AnalyzeResponse) {
   return [...hours]
 }
 
-function cumulativeOption(response: AnalyzeResponse, t: ChartTheme) {
+export function cumulativeOption(response: AnalyzeResponse, t: ChartTheme) {
   const { t0 } = response.prediction
   return {
     tooltip: {

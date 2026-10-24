@@ -1,7 +1,6 @@
 import { observer } from 'mobx-react-lite'
 import { Notice } from '@/components/Notice'
 import { Button } from '@/components/ui/button'
-import { loadDemo } from '@/data'
 import { store } from '@/state/store'
 
 /** What the result steps show until there is a response: missing input, engine start, running, error. */
@@ -14,7 +13,7 @@ export const AnalysisState = observer(function AnalysisState() {
         title="No data yet"
         action={
           <div className="flex gap-2">
-            <Button onClick={() => store.loadDataset(loadDemo())}>Load demo data</Button>
+            <Button onClick={() => store.loadDemo()}>Load demo data</Button>
             <Button variant="outline" onClick={() => store.setStep('upload')}>
               Upload files
             </Button>

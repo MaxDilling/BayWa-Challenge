@@ -15,7 +15,7 @@ import { OutageStep } from '@/steps/OutageStep'
 import { ResultsStep } from '@/steps/ResultsStep'
 import { UploadStep } from '@/steps/UploadStep'
 
-const STEP_INFO: Record<Step, { label: string; sentence: string; View: () => ReactNode }> = {
+const STEP_INFO: Record<Step, { label: string; sentence?: string; View: () => ReactNode }> = {
   upload: {
     label: 'Upload',
     sentence: 'Add the 10-minute wind series of the affected farm and of one or more reference farms, plus the turbine power curve.',
@@ -23,7 +23,6 @@ const STEP_INFO: Record<Step, { label: string; sentence: string; View: () => Rea
   },
   outage: {
     label: 'Outage',
-    sentence: 'Check the outage detected from the missing target data; drag on the chart or type to adjust start and end.',
     View: OutageStep,
   },
   method: {
@@ -38,7 +37,7 @@ const STEP_INFO: Record<Step, { label: string; sentence: string; View: () => Rea
   },
   export: {
     label: 'Export',
-    sentence: 'Download the prediction as CSV and copy a summary email for the insurer.',
+    sentence: 'Download the report for the insurer as PDF and the prediction as CSV, or copy a summary email.',
     View: ExportStep,
   },
 }
@@ -54,7 +53,7 @@ function stepStatus(step: Step): string {
   if (!store.turbinesConfirmed) return 'Confirm turbines'
   if (status === 'running') return 'Calculating…'
   if (step === 'results') return response ? `${fmtAmount(response.energy.kwhP50)} kWh lost` : status === 'error' ? 'Not available' : '—'
-  return response ? 'CSV · email' : '—'
+  return response ? 'PDF · CSV · email' : '—'
 }
 
 const Stepper = observer(function Stepper() {
@@ -160,7 +159,7 @@ export default observer(function App() {
             <h2 className="text-heading font-semibold">
               {index + 1}. {label}
             </h2>
-            <p className="text-muted-foreground">{sentence}</p>
+            {sentence && <p className="text-muted-foreground">{sentence}</p>}
           </div>
           <View />
           <div className="flex justify-between">

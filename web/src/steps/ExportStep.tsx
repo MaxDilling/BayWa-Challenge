@@ -1,14 +1,16 @@
-import { Check, Copy, Download, Mail } from 'lucide-react'
+import { Check, Copy, Download, FileText, Mail } from 'lucide-react'
 import { observer } from 'mobx-react-lite'
 import { useState } from 'react'
 import { AnalysisState } from '@/components/AnalysisState'
 import { fmtDateTime, fmtDuration, fmtNum, fmtPct, HOUR, isoBerlin, STEP_MS, toLocalInput } from '@/components/format'
-import { BAND_HINT, farmText, headline } from '@/components/metrics'
+import { BAND_HINT, farmText, headline, referenceText, toolText, trainingDays } from '@/components/metrics'
 import { Section } from '@/components/Section'
 import { Button } from '@/components/ui/button'
+import { Notice } from '@/components/Notice'
 import { FILLED_HEADER, filledTargetCsv, type Dataset, type Span, type Warning } from '@/data'
 import type { AnalyzeResponse } from '@/engine'
 import { store } from '@/state/store'
+import { Report } from '@/steps/Report'
 
 const COLUMNS = ['time_berlin', 'time_utc', 'wind_mean_ms', 'wind_q10_ms', 'wind_q90_ms', 'power_mean_kw', 'energy_kwh', 'cumulative_kwh']
 
@@ -39,13 +41,6 @@ function download(name: string, text: string) {
   setTimeout(() => URL.revokeObjectURL(a.href))
 }
 
-/** The reference the model used; with several, why this one. */
-function referenceText({ references }: Dataset, { explanation: { diagnostics: d } }: AnalyzeResponse) {
-  if (d.reference_index === undefined) return references[0].id
-  const others = references.filter((_, i) => i !== d.reference_index).map((r) => r.id)
-  return `${references[d.reference_index].id} (chosen from ${references.length} farms because it tracked the target best before the outage, r = ${fmtNum(d[`r_ref_${d.reference_index}`], 3)}; not used: ${others.join(', ')})`
-}
-
 function emailDraft(dataset: Dataset, outage: Span, model: string, response: AnalyzeResponse, warnings: Warning[]) {
   const v = response.validation
   const target = dataset.target.id
@@ -59,7 +54,7 @@ function emailDraft(dataset: Dataset, outage: Span, model: string, response: Ana
     'Dear Sir or Madam,',
     `we report an outage of wind farm ${target} (${farmText(dataset)}) from ${fmtDateTime(outage.startMs)} to ${fmtDateTime(outage.endMs)} (Europe/Berlin), ${fmtDuration(outage.endMs - outage.startMs)} in total.`,
     `Estimated lost energy: ${headline(response.energy).replace('Most', 'most')} The range is the 10 % to 90 % quantile (P10 to P90). ${BAND_HINT}`,
-    `Method: the missing 10-minute wind speeds were predicted from the neighbouring reference farm ${referenceText(dataset, response)}, using the relationship learned from the ${fmtNum((outage.startMs - dataset.target.grid.t0) / 86_400_000)} days of data before the outage (${model}). The predicted wind was converted to energy with the turbine power curve, taking the uncertainty of each prediction into account.`,
+    `Method: the missing 10-minute wind speeds were predicted from ${referenceText(dataset.references, response.explanation)}, using the relationship learned from the ${fmtNum(trainingDays(dataset, outage))} days of data before the outage (${model}). The predicted wind was converted to energy with the turbine power curve, taking the uncertainty of each prediction into account.`,
     v.n_folds && accuracy.length
       ? `Accuracy: in ${fmtNum(v.n_folds)} simulated outages of the same length before the event, ${accuracy.join(', ')}.`
       : 'Accuracy: there was not enough data before the outage for a backtest.',
@@ -67,7 +62,7 @@ function emailDraft(dataset: Dataset, outage: Span, model: string, response: Ana
       `Data checks to note: ${warnings.map((w) => `${w.title}. ${w.detail}`).join(' ')}`,
     'The prediction is attached as a CSV file with 10-minute values in Europe/Berlin and UTC time.',
     'Kind regards',
-    `Calculated with Wind Outage Tool, windgap ${response.engine.version} (${response.engine.id === 'py' ? 'Python' : 'TypeScript'} engine).`,
+    `Calculated with ${toolText(response)}.`,
   ]
     .filter(Boolean)
     .join('\n\n')
@@ -83,6 +78,7 @@ export const ExportStep = observer(function ExportStep() {
   const { subject, body } = emailDraft(dataset, outage, store.label(model), response, warnings)
   return (
     <div className="grid gap-section lg:grid-cols-2">
+      <ReportCard />
       <FilledCard dataset={dataset} response={response} />
       <EmailCard subject={subject} body={body} />
       <Section
@@ -173,6 +169,39 @@ const DownloadAll = observer(function DownloadAll() {
     >
       <Download /> All {targets.length} targets
     </Button>
+  )
+})
+
+/** The insurer's PDF for every target with a result for the selected model; waits until no target is still being calculated. */
+const ReportCard = observer(function ReportCard() {
+  const [printed, setPrinted] = useState(0)
+  const { targets, datasets, outages, resultsByTarget, failuresByTarget, model } = store
+  const pending = targets.filter((t) => datasets[t.id] && outages[t.id] && !resultsByTarget[t.id]?.[model] && failuresByTarget[t.id]?.[model] === undefined)
+  const left = targets.filter((t) => !resultsByTarget[t.id]?.[model] && !pending.includes(t))
+  return (
+    <Section
+      title="Report for the insurer"
+      className="lg:col-span-2"
+      description="One PDF with lost energy and range, wind and energy charts, method, accuracy and data checks for every target. Choose “Save as PDF” in the print dialog."
+      action={
+        <Button disabled={pending.length > 0} onClick={() => setPrinted((n) => n + 1)}>
+          <FileText /> Download report (PDF)
+        </Button>
+      }
+    >
+      {pending.length > 0 ? (
+        <Notice tone="loading" title="Still calculating">
+          The report waits for {pending.map((t) => t.id).join(', ')}.
+        </Notice>
+      ) : (
+        <p className="text-label text-muted-foreground">
+          {targets.length > 1 ? `${targets.length - left.length} of ${targets.length} targets, a page or two each` : `Target ${targets[0].id}`} ·{' '}
+          {store.label(model)}
+          {left.length > 0 && ` · without a result, named in the report: ${left.map((t) => t.id).join(', ')}`}
+        </p>
+      )}
+      {printed > 0 && <Report key={printed} />}
+    </Section>
   )
 })
 

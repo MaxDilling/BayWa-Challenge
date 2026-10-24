@@ -15,6 +15,15 @@ const dateTime = new Intl.DateTimeFormat('en-GB', {
   hour: '2-digit',
   minute: '2-digit',
 })
+const dateTimeZone = new Intl.DateTimeFormat('en-GB', {
+  timeZone: TZ,
+  day: 'numeric',
+  month: 'short',
+  year: 'numeric',
+  hour: '2-digit',
+  minute: '2-digit',
+  timeZoneName: 'short',
+})
 const dayTime = new Intl.DateTimeFormat('en-GB', {
   timeZone: TZ,
   weekday: 'short',
@@ -41,6 +50,9 @@ export const fmtDateTime = (ms: number) => dateTime.format(ms)
 export const fmtDate = (ms: number) => date.format(ms)
 export const fmtDayTime = (ms: number) => dayTime.format(ms)
 export const fmtSpan = (s: Span) => `${fmtDateTime(s.startMs)} – ${fmtDateTime(s.endMs)}`
+/** With the zone of each end, for paper: "1 Sept 2026, 00:00 CEST – 4 Sept 2026, 00:00 CEST" */
+export const fmtDateTimeZone = (ms: number) => dateTimeZone.format(ms)
+export const fmtSpanZone = (s: Span) => `${fmtDateTimeZone(s.startMs)} – ${fmtDateTimeZone(s.endMs)}`
 
 /** Axis labels: the time, and the date at midnight. */
 export const fmtAxisTime = (ms: number) => {

@@ -6,7 +6,7 @@ import { fmtAmount, fmtDuration, fmtNum } from '@/components/format'
 import { Formula } from '@/components/Formula'
 import { Hint } from '@/components/Hint'
 import { BENCHMARK } from '@/components/HowItWorks'
-import { METRICS } from '@/components/metrics'
+import { compass, KEYS, keyValue, METRICS, wakeSectors, wakeText } from '@/components/metrics'
 import { Section } from '@/components/Section'
 import { Warnings } from '@/components/Warnings'
 import { Badge } from '@/components/ui/badge'
@@ -14,44 +14,9 @@ import type { AnalyzeResponse, ModelInfo } from '@/engine'
 import { cn } from '@/lib/utils'
 import { store } from '@/state/store'
 
-/** Plain names, units and explanations for the keys of `params` and `diagnostics`; other keys are shown as they come. */
-const KEYS: Record<string, { label: string; unit?: string; digits: number; hint: string }> = {
-  a: { label: 'Intercept a', unit: 'm/s', digits: 2, hint: 'Where the line starts: the predicted target wind when the reference is calm.' },
-  b: { label: 'Slope b', digits: 3, hint: 'How much the target wind changes per 1 m/s of reference wind.' },
-  r: { label: 'Correlation r', digits: 3, hint: 'How closely target and reference move together before the outage; 1 is perfect, below 0.7 is weak.' },
-  lag_min: {
-    label: 'Delay τ',
-    unit: 'min',
-    digits: 0,
-    hint: 'How long the weather takes from one farm to the other. The model reads the reference this much earlier (later if negative).',
-  },
-  n_train: { label: 'Training values', unit: '× 10 min', digits: 0, hint: '10-minute values before the outage where both farms measured.' },
-  sigma_0: {
-    label: 'Uncertainty in calm wind',
-    unit: 'm/s',
-    digits: 2,
-    hint: 'Width σ of the uncertainty at 0 m/s, measured on training data the model had not seen. The 80 % band is ±1.28 σ.',
-  },
-  sigma_slope: {
-    label: 'Uncertainty growth',
-    unit: 'm/s per m/s',
-    digits: 3,
-    hint: 'How much σ grows per 1 m/s of predicted wind: errors are larger in strong wind.',
-  },
-  error_memory_h: {
-    label: 'How long errors persist',
-    unit: 'h',
-    digits: 1,
-    hint: 'If the model is too high now, it tends to stay too high for about this long. The longer, the less errors cancel over an outage and the wider the energy range.',
-  },
-}
-
 const COMPARED = [METRICS.energy_wape_pct, METRICS.wind_rmse, METRICS.coverage_80]
 /** Reference choice and wake factors, shown in their own cards. */
 const OWN_CARD = /^(reference_index|r_ref_\d+|wake_(factor|steps)_.+)$/
-const COMPASS = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE', 'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW']
-const compass = (deg: number) => `${COMPASS[Math.round(deg / 22.5) % 16]} ${fmtNum(deg)}°`
-
 /** Bonus 3: the model picks the reference that tracked the target best before the outage; this card shows why. */
 const ReferenceChoice = observer(function ReferenceChoice({ response }: { response: AnalyzeResponse }) {
   const d = response.explanation.diagnostics
@@ -99,7 +64,7 @@ export const MethodStep = observer(function MethodStep() {
           {response.explanation.diagnostics.reference_index !== undefined && <ReferenceChoice response={response} />}
           <Explanation response={response} />
           <ScatterCard response={response} />
-          {wakeSectors(response).length > 0 && <WakeCard response={response} />}
+          {wakeSectors(response.explanation).length > 0 && <WakeCard response={response} />}
         </>
       ) : (
         <div className="lg:col-span-12">
@@ -193,10 +158,7 @@ function Explanation({ response }: { response: AnalyzeResponse }) {
           return (
             <div key={key} className="contents">
               <dt className="text-muted-foreground">{meta ? <Hint label={meta.label}>{meta.hint}</Hint> : key}</dt>
-              <dd className="text-right font-medium tabular-nums">
-                {fmtNum(value, meta?.digits ?? 3)}
-                {meta?.unit && ` ${meta.unit}`}
-              </dd>
+              <dd className="text-right font-medium tabular-nums">{keyValue(key, value)}</dd>
             </div>
           )
         })}
@@ -270,18 +232,7 @@ function ScatterCard({ response }: { response: AnalyzeResponse }) {
   )
 }
 
-/** The factor per wind direction sector (multi_regression): what the references cannot see, such as a neighbour's wake. */
-function wakeSectors({ explanation: { params, diagnostics } }: AnalyzeResponse) {
-  return Object.keys(params)
-    .filter((k) => k.startsWith('wake_factor_'))
-    .map((k) => {
-      const deg = Number(k.slice('wake_factor_'.length))
-      return { deg, factor: params[k], steps: diagnostics[`wake_steps_${k.slice('wake_factor_'.length)}`] }
-    })
-    .sort((a, b) => a.deg - b.deg)
-}
-
-function wakeOption(sectors: ReturnType<typeof wakeSectors>, t: ChartTheme) {
+export function wakeOption(sectors: ReturnType<typeof wakeSectors>, t: ChartTheme) {
   return {
     grid: { left: t.label * 2.5, bottom: t.label * 2 },
     tooltip: {
@@ -304,24 +255,10 @@ function wakeOption(sectors: ReturnType<typeof wakeSectors>, t: ChartTheme) {
 
 /** Bonus 2 in plain words: how much more or less wind the target sees from each direction than its references suggest. */
 function WakeCard({ response }: { response: AnalyzeResponse }) {
-  const sectors = wakeSectors(response)
+  const sectors = wakeSectors(response.explanation)
   const option = useCallback((t: ChartTheme) => wakeOption(sectors, t), [sectors])
-  const strongest = sectors.reduce((a, b) => (Math.abs(b.factor - 1) > Math.abs(a.factor - 1) ? b : a))
-  const change = strongest.factor - 1
   return (
-    <Section
-      title="Wake and terrain by wind direction"
-      description={
-        <>
-          From each direction, the target gets this much more or less wind than its references suggest; the model multiplies its prediction
-          by that factor. Strongest: with wind from {compass(strongest.deg)} the target measures {fmtNum(Math.abs(change) * 100, 1)} %{' '}
-          {change < 0 ? 'less' : 'more'} ({fmtNum(strongest.steps)} values before the outage)
-          {change < 0 ? ', typical for the wake of a neighbouring turbine or terrain in that direction' : ''}. Directions with few values
-          are pulled towards 0 %.
-        </>
-      }
-      className="lg:col-span-12"
-    >
+    <Section title="Wake and terrain by wind direction" description={wakeText(sectors)} className="lg:col-span-12">
       <Chart option={option} className="h-chart-sm" />
     </Section>
   )

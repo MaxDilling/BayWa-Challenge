@@ -38,7 +38,7 @@ const STEP_INFO: Record<Step, { label: string; sentence: string; View: () => Rea
   },
   export: {
     label: 'Export',
-    sentence: 'Download the prediction as CSV and copy a summary email for the insurer.',
+    sentence: 'Download the report for the insurer as PDF and the prediction as CSV, or copy a summary email.',
     View: ExportStep,
   },
 }
@@ -54,7 +54,7 @@ function stepStatus(step: Step): string {
   if (!store.turbinesConfirmed) return 'Confirm turbines'
   if (status === 'running') return 'Calculating…'
   if (step === 'results') return response ? `${fmtAmount(response.energy.kwhP50)} kWh lost` : status === 'error' ? 'Not available' : '—'
-  return response ? 'CSV · email' : '—'
+  return response ? 'PDF · CSV · email' : '—'
 }
 
 const Stepper = observer(function Stepper() {

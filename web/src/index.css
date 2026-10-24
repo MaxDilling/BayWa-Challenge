@@ -12,7 +12,9 @@
  * tokens at runtime and ECharts does not parse oklch.
  */
 
-:root {
+/* `.light` forces the light scheme inside a dark page, e.g. for the printed report. */
+:root,
+.light {
     --brand-50: #eefaf2;
     --brand-100: #d5f2df;
     --brand-200: #ace4c2;
@@ -109,6 +111,12 @@
     --chart-line: 2;
     --chart-line-thin: 1.25;
     --chart-point: 3;
+
+    /* Report charts (steps/Report.tsx): pixels at print width, drawn at 3× for paper */
+    --print-chart-width: 680;
+    --print-chart-height: 230;
+    --print-chart-height-sm: 160;
+    --print-chart-scale: 3;
 
     /* Shape */
     --radius: 0.0rem;
@@ -269,5 +277,27 @@
     }
     math {
         font-family: var(--font-formula);
+    }
+}
+
+/* The report (steps/Report.tsx) exists only on paper: hidden on screen, the only thing printed while it is mounted. */
+.report {
+    display: none;
+}
+
+@media print {
+    @page {
+        size: A4;
+        margin: 14mm 15mm;
+    }
+    body:has(> .report) {
+        background: none;
+    }
+    body:has(> .report) > :not(.report) {
+        display: none;
+    }
+    .report {
+        display: block;
+        print-color-adjust: exact;
     }
 }

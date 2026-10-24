@@ -195,11 +195,11 @@ class Writer {
     this.y += 0.8
   }
 
-  /** A chart image at full column width, `height` in the chart's pixels. */
-  image(url: string, size: { width: number; height: number }) {
+  /** A chart image at full column width, `size` in the chart's pixels; drawn only when it is placed. */
+  image(url: () => string, size: { width: number; height: number }) {
     const height = (this.width * size.height) / size.width
     this.fits(height)
-    if (!this.dry) this.doc.addImage(url, 'PNG', this.x, this.y, this.width, height)
+    if (!this.dry) this.doc.addImage(url(), 'PNG', this.x, this.y, this.width, height)
     this.y += height
   }
 
@@ -277,21 +277,20 @@ export function reportPdf(input: ReportInput): Blob {
   )
   w.y += 4
   overview(w, input, done)
-  done.forEach((c, i) => {
-    if (i) w.newPage()
-    else w.y += 6
+  done.forEach((c) => {
+    w.newPage()
     target(w, c, input, chart)
   })
-  w.newPage()
-  done.forEach((c, i) =>
-    i
-      ? derivation(w, c, input)
-      : w.keep(() => {
-          w.text('How the figures were derived', { size: s.heading, bold: true })
-          w.text('Step by step from the wind to the lost energy, for each target.', { color: s.muted })
-          derivation(w, c, input)
-        }),
-  )
+  done.forEach((c, i) => {
+    if (i % 2 === 0) w.newPage()
+    w.keep(() => {
+      if (!i) {
+        w.text('How the figures were derived', { size: s.heading, bold: true })
+        w.text('Step by step from the wind to the lost energy, for each target.', { color: s.muted })
+      }
+      derivation(w, c, input)
+    })
+  })
   assumptions(w, input, done, tool)
 
   const pages = w.doc.getNumberOfPages()
@@ -341,14 +340,21 @@ function overview(w: Writer, input: ReportInput, done: Required<Case>[]) {
   if (done.length > 1) w.text(TOTAL_HINT, { color: s.muted })
 }
 
+/** One page: the wind and wake charts shrink as far as the rest needs the room. */
 function target(w: Writer, c: Required<Case>, input: ReportInput, chart: ChartTheme) {
+  const fixed = w.measure(() => targetPage(w, c, input, chart, 0))
+  const full = w.measure(() => targetPage(w, c, input, chart, 1))
+  targetPage(w, c, input, chart, Math.min(1, Math.max(0, (w.bottom - w.top - fixed) / (full - fixed))))
+}
+
+function targetPage(w: Writer, c: Required<Case>, input: ReportInput, chart: ChartTheme, scale: number) {
   const s = w.s
   const { dataset, outage, response } = c
   const { energy, explanation } = response
   const roles = referenceRoles(dataset.references, explanation)
   const sectors = wakeSectors(explanation)
   const half = { width: chart.print.width / 2, height: chart.print.heightSm }
-  const cumulative = chartImage(cumulativeOption([c], chart), chart, half.height, half.width)
+  const tall = { width: chart.print.width, height: chart.print.height * scale }
 
   w.text(`Target ${c.id}`, { size: s.heading, bold: true, gap: 3 })
   w.table(
@@ -356,20 +362,23 @@ function target(w: Writer, c: Required<Case>, input: ReportInput, chart: ChartTh
     ['Outage (Europe/Berlin)', 'Duration', 'Turbines', 'Power curve'],
     [[{ text: fmtSpanZone(outage) }, { text: fmtDuration(outage.endMs - outage.startMs) }, { text: farmText(dataset) }, { text: c.curve }]],
   )
+  const from = (station: boolean) => roles.filter((r) => input.stations.includes(r.id) === station).map((r) => r.id).join(', ')
   w.table(
-    [30],
-    ['Reference', 'Source'],
-    roles.map((r) => [{ text: r.id }, { text: input.stations.includes(r.id) ? 'DWD weather station' : 'Uploaded series' }]),
+    [40],
+    ['Source', 'References'],
+    [
+      [{ text: 'Uploaded series' }, { text: from(false) }],
+      [{ text: 'DWD weather stations' }, { text: from(true) }],
+    ].filter(([, ids]) => ids.text),
   )
   const used = { ...dataset, references: dataset.references.filter((_, i) => roles[i].used) }
-  const wind = chartImage({ ...windOption([{ ...c, dataset: used }], outage, chart), grid: {} }, chart, chart.print.height)
   w.keep(() => {
     w.title('Wind speed')
     w.text(
       'Prediction with its 80 % band (10 % to 90 % quantile) during the outage (red), the measurements before and after, and the references the model uses.',
       { color: s.muted },
     )
-    w.image(wind, { width: chart.print.width, height: chart.print.height })
+    w.image(() => chartImage({ ...windOption([{ ...c, dataset: used }], outage, chart), grid: {} }, chart, tall.height), tall)
   })
   w.columns(
     () => {
@@ -387,7 +396,7 @@ function target(w: Writer, c: Required<Case>, input: ReportInput, chart: ChartTh
     () => {
       w.title('Cumulative lost energy')
       w.text('Expected energy (P50) lost since the start of the outage', { size: s.label, color: s.muted })
-      w.image(cumulative, half)
+      w.image(() => chartImage(cumulativeOption([c], chart), chart, half.height, half.width), half)
     },
   )
 
@@ -396,7 +405,7 @@ function target(w: Writer, c: Required<Case>, input: ReportInput, chart: ChartTh
     w.keep(() => {
       w.title('Weights by wind direction')
       w.text(SECTOR_TEXT, { color: s.muted, gap: 1 })
-      const width = Math.min(22, (w.width - 44) / weights.references.length)
+      const width = Math.min(22, (w.width - 44) / (weights.references.length + 2))
       const cells = (texts: string[], color?: string) =>
         [...texts, ''].map((text, k) => ({ text, width: k === 0 ? 26 : k === 1 ? 18 : width, color, align: k ? ('right' as const) : undefined }))
       w.row(cells(['Wind from', 'Values', 'a (m/s)', ...weights.references], s.muted), s.label)
@@ -408,11 +417,10 @@ function target(w: Writer, c: Required<Case>, input: ReportInput, chart: ChartTh
     })
 
   if (!sectors.length) return
-  const wake = chartImage(wakeOption(sectors, chart), chart, chart.print.height)
   w.keep(() => {
     w.title('Wake and terrain by wind direction')
     w.text(wakeText(sectors), { color: s.muted })
-    w.image(wake, { width: chart.print.width, height: chart.print.height })
+    w.image(() => chartImage(wakeOption(sectors, chart), chart, tall.height), tall)
   })
 }
 

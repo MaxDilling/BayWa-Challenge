@@ -9,6 +9,7 @@ import { readTheme } from '@/components/charts/theme'
 import { fmtAmount, fmtDateTimeZone, fmtDuration, fmtNum, fmtSpanZone } from '@/components/format'
 import {
   compass,
+  densityText,
   farmText,
   missing,
   referenceRoles,
@@ -392,6 +393,7 @@ function targetPage(w: Writer, c: Required<Case>, input: ReportInput, chart: Cha
           [{ text: 'P90' }, kwh(energy.kwhP90), { text: '90 % quantile, high end' }],
         ],
       )
+      w.text(densityText(energy), { size: s.label, color: s.muted })
     },
     () => {
       w.title('Cumulative lost energy')

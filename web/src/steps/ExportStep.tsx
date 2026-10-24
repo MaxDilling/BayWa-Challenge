@@ -4,13 +4,12 @@ import { useEffect, useState } from 'react'
 import { AnalysisState } from '@/components/AnalysisState'
 import { fmtAmount, fmtDateTime, fmtDuration, fmtNum, fmtPct, HOUR, isoBerlin, STEP_MS, toLocalInput } from '@/components/format'
 import {
-  BAND_HINT,
   calculating,
   densityText,
   farmText,
   missing,
+  referenceRoles,
   referenceText,
-  toolText,
   TOTAL_HINT,
   totalText,
   type Case,
@@ -51,12 +50,14 @@ function download(name: string, data: string | Blob) {
   setTimeout(() => URL.revokeObjectURL(a.href))
 }
 
+const ACCURACY_LINES = [
+  { key: 'energy_wape_pct', label: 'Lost-energy error', value: (v: number) => `${fmtNum(v, 1)} %`, note: ' of the measured energy' },
+  { key: 'wind_rmse', label: 'Wind speed error (RMSE)', value: (v: number) => `${fmtNum(v, 2)} m/s`, note: '' },
+  { key: 'coverage_80', label: 'Measured values inside the 80 % band', value: (v: number) => fmtPct(v, 0), note: '' },
+]
+
 const accuracyLines = (v: Record<string, number>) =>
-  [
-    v.energy_wape_pct !== undefined && `Lost-energy error: ${fmtNum(v.energy_wape_pct, 1)} % of the measured energy`,
-    v.wind_rmse !== undefined && `Wind speed error (RMSE): ${fmtNum(v.wind_rmse, 2)} m/s`,
-    v.coverage_80 !== undefined && `Measured values inside the 80 % band: ${fmtPct(v.coverage_80, 0)}`,
-  ].filter((line) => line !== false)
+  ACCURACY_LINES.filter((m) => v[m.key] !== undefined).map((m) => `${m.label}: ${m.value(v[m.key])}${m.note}`)
 
 function emailDraft(dataset: Dataset, outage: Span, model: string, response: AnalyzeResponse, warnings: Warning[]) {
   const v = response.validation
@@ -97,20 +98,30 @@ function emailDraft(dataset: Dataset, outage: Span, model: string, response: Ana
   return { subject, body }
 }
 
-/** The email for every target at once: the shared outage, one line per target, the P50 total, and per target its references
- * and backtest. */
+/** The email for every target at once: the shared outage, one line per target, the P50 total, one method for all and
+ * per target its backtest. */
 function totalEmailDraft(cases: Case[], outage: Span, model: string, warnings: Warning[]) {
   const done = cases.filter((c) => c.response) as Required<Case>[]
   const ids = cases.map((c) => c.id).join(', ')
-  const perTarget = (title: string, lines: (c: Required<Case>) => string[]) =>
-    [title, ...done.flatMap((c) => lines(c).map((line, i) => (i ? `  – ${line}` : `• ${c.id}: ${line}`)))].join('\n')
+  const references = [...new Set(done.flatMap((c) => referenceRoles(c.dataset.references, c.response.explanation).filter((r) => r.used).map((r) => r.id)))]
+  const tested = done.filter((c) => c.response.validation.n_folds && accuracyLines(c.response.validation).length)
+  const folds = tested.map((c) => c.response.validation.n_folds)
+  const validation = tested.length
+    ? [
+        `Backtest on ${Math.min(...folds) === Math.max(...folds) ? fmtNum(folds[0]) : `${fmtNum(Math.min(...folds))}–${fmtNum(Math.max(...folds))}`} simulated outages of the same length before the event:`,
+        ...ACCURACY_LINES.flatMap((m) => {
+          const values = tested.filter((c) => c.response.validation[m.key] !== undefined).map((c) => `${c.id} ${m.value(c.response.validation[m.key])}`)
+          return values.length ? [`• ${m.label}: ${values.join(', ')}${m.note}`] : []
+        }),
+      ]
+    : ['There was not enough data before the outage for a backtest.']
   const subject = `Energy loss estimate – targets ${ids} – outage of ${fmtDateTime(outage.startMs)}`
   const body = [
     'Dear Sir/Madam,',
-    `Please find below our estimate of the energy lost during the outage of targets ${ids}. Attached are the report (PDF) with charts, method and accuracy for each target, and the prediction as a CSV file with 10-minute values in Europe/Berlin and UTC time.`,
+    `Please find below our estimate of the energy lost during the outage of targets ${ids}. Attached are the report (PDF) with charts, method and accuracy for each target, and the prediction as a CSV file with 10-minute values in Berlin and UTC time.`,
     [
       'Outage',
-      `• Period: ${fmtDateTime(outage.startMs)} – ${fmtDateTime(outage.endMs)} (Europe/Berlin)`,
+      `• Period: ${fmtDateTime(outage.startMs)} – ${fmtDateTime(outage.endMs)} (Berlin)`,
       `• Duration: ${fmtDuration(outage.endMs - outage.startMs)}`,
     ].join('\n'),
     [
@@ -118,24 +129,18 @@ function totalEmailDraft(cases: Case[], outage: Span, model: string, warnings: W
       ...cases.map((c) => {
         const e = c.response?.energy
         return e
-          ? `• ${c.id} (${farmText(c.dataset!)}): most likely ${fmtAmount(e.kwhP50)} kWh, 80 % range ${fmtAmount(e.kwhP10)} – ${fmtAmount(e.kwhP90)} kWh`
+          ? `• ${c.id} (${farmText(c.dataset!)}): most likely ${fmtAmount(e.kwhP50)} kWh, 80 % range (low / high estimate: 10 % / 90 % quantile) ${fmtAmount(e.kwhP10)} – ${fmtAmount(e.kwhP90)} kWh`
           : `• ${c.id}: ${missing(c)}`
       }),
       ...(done.length > 1 ? [`${totalText(done.length, cases.length)} (P50): ${fmtAmount(done.reduce((sum, c) => sum + c.response.energy.kwhP50, 0))} kWh. ${TOTAL_HINT}`] : []),
     ].join('\n'),
-    perTarget(
-      `Method\nThe missing 10-minute wind speeds were predicted with ${model}, learned from the target data outside the outage, and converted to energy with the turbine power curve. ${BAND_HINT}`,
-      (c) => [`predicted from ${referenceText(c.dataset.references, c.response.explanation)}.`, densityText(c.response.energy)],
-    ),
-    perTarget('Validation', (c) => {
-      const accuracy = accuracyLines(c.response.validation)
-      return c.response.validation.n_folds && accuracy.length
-        ? [`backtest on ${fmtNum(c.response.validation.n_folds)} simulated outages of the same length.`, ...accuracy]
-        : ['not enough data before the outage for a backtest.']
-    }),
+    [
+      'Method',
+      `The missing 10-minute wind speeds were predicted from the reference farms ${references.join(', ')} using ${model}. Each prediction, including its uncertainty, was converted to energy with the turbine power curve.`,
+    ].join('\n'),
+    ['Validation', ...validation].join('\n'),
     warnings.length > 0 && ['Data notes', ...warnings.map((w) => `• ${w.title}. ${w.detail}`)].join('\n'),
     'Kind regards',
-    done[0] && `—\nCalculated with ${toolText(done[0].response)}`,
   ]
     .filter(Boolean)
     .join('\n\n')

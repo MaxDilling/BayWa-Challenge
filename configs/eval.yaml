@@ -27,8 +27,16 @@ scenarios:
 datasets:
   - {name: synthetic, kind: synthetic, days: 30, seed: 0}
   - {name: demo, kind: folder, path: data/synthetic}
-  - {name: dwd, kind: folder, path: "data/dwd/*", wind_scale: 1.38}
+  - {name: dwd, kind: folder, path: "data/dwd/*", wind_scale: 1.38, scenarios: {t0_step_h: 24}}
   - {name: challenge, kind: folder, path: data/challenge, n_turbines: 1}
+  # The organizers' data after `make csv`: each target turbine with the references outside its park (H, O). 90 days
+  # and seven references per target: a wider t₀ step keeps the whole run under 30 s.
+  - {name: T1, kind: folder, path: data/data_hackathon_baywa_re, files: [T1_*.csv, "[HO]*.csv"], target: T1_data,
+     scenarios: {t0_step_h: 144}}
+  - {name: T2, kind: folder, path: data/data_hackathon_baywa_re, files: [T2_*.csv, "[HO]*.csv"], target: T2_data,
+     scenarios: {t0_step_h: 144}}
+  - {name: T3, kind: folder, path: data/data_hackathon_baywa_re, files: [T3_*.csv, "[HO]*.csv"], target: T3_data,
+     scenarios: {t0_step_h: 144}}
 
 # Extra leaderboard rows: a registered model with fixed params. Without the delay τ (M1 instead of M3), to show
 # what the lag search adds.

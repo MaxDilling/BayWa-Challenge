@@ -84,3 +84,31 @@ def test_context_stops_at_a_reference_gap():
 def test_lag_search_respects_its_limit():
     model = registry.create("linear_regression", lag_max_min=0).fit(2 + 0.5 * REF.shift(2), REF.to_frame())
     assert model.explain().diagnostics["lag_min"] == 0
+
+
+_NOISE = np.random.default_rng(0).normal(0, 1, (2, 600))  # wind-like: a delay must stand out against its neighbours
+REF_A = REF + _NOISE[0]
+REF_B = pd.Series(5 + 2 * np.cos(np.arange(600) / 33) + _NOISE[1], index=INDEX)
+
+
+def test_multi_regression_recovers_weights_and_delays():
+    target = 1 + 0.6 * REF_A.shift(2) + 0.3 * REF_B
+    explanation = registry.create("multi_regression").fit(target, pd.DataFrame({"a": REF_A, "b": REF_B})).explain()
+    assert explanation.params == pytest.approx({"a": 1.0, "b_ref_0": 0.6, "b_ref_1": 0.3})
+    assert (explanation.diagnostics["lag_min_ref_0"], explanation.diagnostics["lag_min_ref_1"]) == (20, 0)
+    assert explanation.diagnostics["r"] == pytest.approx(1)
+
+
+def test_multi_regression_leaves_out_a_reference_with_negative_weight():
+    target = 1 + 0.6 * REF - 0.3 * REF_B
+    explanation = registry.create("multi_regression", lag_max_min=0).fit(target, pd.DataFrame({"a": REF, "b": REF_B})).explain()
+    assert explanation.params["b_ref_1"] == 0
+    assert explanation.params["b_ref_0"] > 0
+
+
+def test_multi_regression_with_one_reference_is_linear_regression(pair):
+    train, test = pair.iloc[:-144], pair.iloc[-144:]
+    lr = registry.create("linear_regression").fit(train["target"], train[["ref"]])
+    multi = registry.create("multi_regression").fit(train["target"], train[["ref"]])
+    assert multi.explain().params == pytest.approx({"a": lr.a, "b_ref_0": lr.b})
+    assert multi.predict(test[["ref"]]).to_numpy() == pytest.approx(lr.predict(test[["ref"]]).to_numpy())

@@ -13,3 +13,4 @@ web/public/pyodide/
 web/public/py/
 .DS_Store
 predictions.csv
+.vscode/settings.json

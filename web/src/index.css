@@ -111,7 +111,7 @@
     --chart-point: 3;
 
     /* Shape */
-    --radius: 0.5rem;
+    --radius: 0.0rem;
     --shadow-card-value: 0 1px 2px 0 color-mix(in srgb, var(--neutral-900) 6%, transparent);
     --shadow-raised-value: 0 4px 16px -4px color-mix(in srgb, var(--neutral-900) 14%, transparent);
 

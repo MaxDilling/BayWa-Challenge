@@ -53,6 +53,8 @@ def analyze(req: dict) -> dict:
     model = registry.create(name, **params).fit(target[train], refs[train], extra_train)
     pred = predict_window(model, refs, outage.start, outage.end, extra)
     energy = energy_loss(expected_power(pred, curve), outage, model.errors.acf)
+    without_direction = {} if extra is None else {"kwhP50WithoutDirection": energy_loss(
+        expected_power(predict_window(model, refs, outage.start, outage.end), curve), outage, model.errors.acf).kwh_p50}
     explanation = model.explain()
 
     return {
@@ -75,6 +77,7 @@ def analyze(req: dict) -> dict:
             "kwhP50": energy.kwh_p50,
             "kwhP90": energy.kwh_p90,
             "cumulativeKwh": _floats(energy.cumulative),
+            **without_direction,
         },
         "scatter": _scatter(target[train], refs[train], extra_train, model, explanation.diagnostics),
         "engine": {"id": "py", "version": windgap.__version__, "ms": (time.perf_counter() - started) * 1000},

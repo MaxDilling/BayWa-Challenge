@@ -43,7 +43,14 @@ export interface AnalyzeResponse {
     diagnostics: Record<string, number>
   }
   /** P10 = 10 % quantile (low), P90 = 90 % quantile (high). */
-  energy: { kwhP10: number; kwhP50: number; kwhP90: number; cumulativeKwh: number[] }
+  energy: {
+    kwhP10: number
+    kwhP50: number
+    kwhP90: number
+    cumulativeKwh: number[]
+    /** P50 of the same fitted model predicted without wind direction (wake factor 1); absent when no reference has a direction. */
+    kwhP50WithoutDirection?: number
+  }
   /** Training pairs as the model sees them: target(t) vs. the chosen reference (diagnostics.reference_index) at t − τ (τ = diagnostics.lag_min), max. 2000 points. */
   scatter: { ref: number[]; target: number[]; fitLine: [number, number][] }
   engine: { id: EngineId; version: string; ms: number }

@@ -209,6 +209,7 @@ const ReportCard = observer(function ReportCard({ subject, body, csv }: { subjec
         curve: store.curveOf(id).name,
       })),
       method: store.label(model),
+      tagline: store.models.find((m) => m.name === model)!.tagline,
       stations,
       files: files.map((f) => f.name),
       created,

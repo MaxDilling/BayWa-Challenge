@@ -32,13 +32,16 @@ export function analyze(req: AnalyzeRequest): AnalyzeResponse {
   const model = create(req.model, params).fit(trainTarget, trainRefs, trainExtra)
   const pred = predictWindow(model, refs, start, end, extra)
   const energy = energyLoss(expectedPower(pred, req.powerCurve), model.errors.acf)
+  const withoutDirection = extra && {
+    kwhP50WithoutDirection: energyLoss(expectedPower(predictWindow(model, refs, start, end), req.powerCurve), model.errors.acf).kwhP50,
+  }
   const explanation = model.explain()
 
   return {
     prediction: { t0: startMs, stepS: 600, mean: [...pred.mean], q10: [...pred.q10], q90: [...pred.q90] },
     validation: finite(backtest(req.model, params, trainTarget, trainRefs, req.powerCurve, refsOut.cols[0].length, trainExtra)),
     explanation: { ...explanation, params: finite(explanation.params), diagnostics: finite(explanation.diagnostics) },
-    energy,
+    energy: { ...energy, ...withoutDirection },
     scatter: scatter(trainTarget, trainRefs, trainExtra, model, explanation.diagnostics),
     engine: { id: 'ts', version: __WINDGAP_VERSION__, ms: performance.now() - started },
   }

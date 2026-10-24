@@ -63,7 +63,8 @@ const OWN_PLACE = /^(reference_index|(r|b|lag_min)_ref_\d+|wake_(factor|steps)_.
 const MM_PER_PT = 25.4 / 72
 const LEADING = 1.35
 const GAP = 6
-const SUB: Record<string, string> = { t: 'ₜ', r: 'ᵣ', i: 'ᵢ', s: 'ₛ', '(': '₍', ')': '₎' }
+// Unicode has no subscript comma; the plain one reads the same in b_{s(t),i}
+const SUB: Record<string, string> = { t: 'ₜ', r: 'ᵣ', i: 'ᵢ', s: 'ₛ', '(': '₍', ')': '₎', ',': ',' }
 
 /** The engine's LaTeX formula as text with Unicode subscripts; a command our models do not use throws. */
 export function formulaText(tex: string) {
@@ -423,7 +424,7 @@ function target(w: Writer, c: Required<Case>, input: ReportInput, chart: ChartTh
       w.text(SECTOR_TEXT, { color: s.muted, gap: 1 })
       const width = Math.min(22, (w.width - 44) / weights.references.length)
       const cells = (texts: string[], color?: string) =>
-        texts.map((text, k) => ({ text, width: k === 0 ? 26 : k === 1 ? 18 : width, color, align: k ? ('right' as const) : undefined }))
+        [...texts, ''].map((text, k) => ({ text, width: k === 0 ? 26 : k === 1 ? 18 : width, color, align: k ? ('right' as const) : undefined }))
       w.row(cells(['Wind from', 'Values', 'a (m/s)', ...weights.references], s.muted), s.label)
       for (const sector of weights.sectors)
         w.row(

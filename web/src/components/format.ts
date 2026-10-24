@@ -48,6 +48,19 @@ export const fmtAxisTime = (ms: number) => {
   return t === '00:00' ? day.format(ms) : t
 }
 
+/** About `count` axis times, evenly spaced in Europe/Berlin wall-clock time from midnight of the first day. */
+export function axisTimes(fromMs: number, toMs: number, count = 12) {
+  const stepH = [1, 2, 3, 6, 12, 24, 48, 168, 336, 672].find((h) => h * HOUR * count >= toMs - fromMs) ?? 672
+  const [y, m, d] = toLocalInput(fromMs).slice(0, 10).split('-').map(Number)
+  const ticks: number[] = []
+  for (let wall = Date.UTC(y, m - 1, d); ; wall += stepH * HOUR) {
+    const ms = fromLocalInput(new Date(wall).toISOString())
+    if (ms === undefined) continue
+    if (ms > toMs) return ticks
+    if (ms >= fromMs) ticks.push(ms)
+  }
+}
+
 export function fmtDuration(ms: number) {
   const h = Math.floor(ms / HOUR)
   const min = Math.round((ms % HOUR) / 60_000)

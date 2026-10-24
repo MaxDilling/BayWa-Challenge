@@ -15,7 +15,7 @@ import { OutageStep } from '@/steps/OutageStep'
 import { ResultsStep } from '@/steps/ResultsStep'
 import { UploadStep } from '@/steps/UploadStep'
 
-const STEP_INFO: Record<Step, { label: string; sentence: string; View: () => ReactNode }> = {
+const STEP_INFO: Record<Step, { label: string; sentence?: string; View: () => ReactNode }> = {
   upload: {
     label: 'Upload',
     sentence: 'Add the 10-minute wind series of the affected farm and of one or more reference farms, plus the turbine power curve.',
@@ -23,7 +23,6 @@ const STEP_INFO: Record<Step, { label: string; sentence: string; View: () => Rea
   },
   outage: {
     label: 'Outage',
-    sentence: 'Check the outage detected from the missing target data; drag on the chart or type to adjust start and end.',
     View: OutageStep,
   },
   method: {
@@ -132,7 +131,7 @@ export default observer(function App() {
             <h2 className="text-heading font-semibold">
               {index + 1}. {label}
             </h2>
-            <p className="text-muted-foreground">{sentence}</p>
+            {sentence && <p className="text-muted-foreground">{sentence}</p>}
           </div>
           <View />
           <div className="flex justify-between">

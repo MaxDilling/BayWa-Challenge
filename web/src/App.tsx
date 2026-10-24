@@ -138,7 +138,7 @@ const TargetSwitch = observer(function TargetSwitch() {
             variant={t === target ? 'default' : 'outline'}
             onClick={() => store.selectTarget(t.id)}
           >
-            {t.id}
+            {store.nameOf(t.id)}
             <span className="tabular-nums opacity-80">{response ? `${fmtAmount(response.energy.kwhP50)} kWh` : '…'}</span>
           </Button>
         )

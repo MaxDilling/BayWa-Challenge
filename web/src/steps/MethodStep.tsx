@@ -145,7 +145,7 @@ const TotalComparison = observer(function TotalComparison() {
               <th className="py-2 pr-3 font-medium">Method</th>
               {ids.map((id) => (
                 <th key={id} className="px-3 py-2 text-right font-medium whitespace-nowrap">
-                  <Hint label={id}>{`${m.label}: ${m.hint}`}</Hint>
+                  <Hint label={store.nameOf(id)}>{`${m.label}: ${m.hint}`}</Hint>
                 </th>
               ))}
               <th className="py-2 pl-3 text-right font-medium whitespace-nowrap">Lost energy P50, total</th>

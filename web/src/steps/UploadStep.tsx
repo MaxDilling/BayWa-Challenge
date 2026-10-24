@@ -5,6 +5,7 @@ import { Chart, type ChartTheme } from '@/components/charts/Chart'
 import { DropZone, FileDrop, FileError } from '@/components/DropZone'
 import { fmtAmount, fmtDate, fmtDateTime, fmtNum, fmtPct, STEP_MS } from '@/components/format'
 import { Section } from '@/components/Section'
+import { SeriesName } from '@/components/SeriesName'
 import { Warnings } from '@/components/Warnings'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -136,7 +137,7 @@ const AllFiles = observer(function AllFiles() {
 const CurveSelect = observer(function CurveSelect({ target }: { target: string }) {
   return (
     <Select value={store.curveOf(target).name} onValueChange={(name) => store.chooseCurve(target, name)}>
-      <SelectTrigger size="sm" aria-label={`Power curve of ${target}`} className="w-48 bg-card text-label [&>span]:truncate">
+      <SelectTrigger size="sm" aria-label={`Power curve of ${store.nameOf(target)}`} className="w-48 bg-card text-label [&>span]:truncate">
         <SelectValue />
       </SelectTrigger>
       <SelectContent>
@@ -197,7 +198,7 @@ const AssignmentView = observer(function AssignmentView() {
           <span className="font-medium">Which farm had the outage?</span>
           {(targetCandidates.length ? targetCandidates : series.map((s) => s.id)).map((id) => (
             <Button key={id} size="sm" variant="outline" onClick={() => store.toggleTarget(id)}>
-              {id}
+              {store.nameOf(id)}
             </Button>
           ))}
         </div>
@@ -206,7 +207,7 @@ const AssignmentView = observer(function AssignmentView() {
         {series.map((s) => (
           <li key={s.id} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 px-3 py-2">
             <span className="min-w-0">
-              <span className="block truncate font-medium">{s.id}</span>
+              <SeriesName id={s.id} />
               <span className="block text-muted-foreground tabular-nums">
                 {seriesLine(s)}
                 {s.direction && ' · with wind direction'}
@@ -220,7 +221,7 @@ const AssignmentView = observer(function AssignmentView() {
           </li>
         ))}
         {curves.map(({ file }) => {
-          const users = targets.filter((t) => store.curveOf(t.id).name === file).map((t) => t.id)
+          const users = targets.filter((t) => store.curveOf(t.id).name === file).map((t) => store.nameOf(t.id))
           return (
             <li key={file} className="flex items-center justify-between gap-3 px-3 py-2">
               <span className="min-w-0">
@@ -259,7 +260,7 @@ function Remove({ what, onClick }: { what: string; onClick: () => void }) {
 /** Removes a dropped file with every series it holds. */
 const RemoveFile = ({ file }: { file: string }) => <Remove what={file} onClick={() => store.removeFile(file)} />
 
-function Facts({ title, action, rows }: { title: string; action?: ReactNode; rows: [string, ReactNode][] }) {
+function Facts({ title, action, rows }: { title: ReactNode; action?: ReactNode; rows: [string, ReactNode][] }) {
   return (
     <div className="rounded-lg bg-muted px-3 py-2.5">
       <div className="mb-1 flex items-center justify-between gap-2">
@@ -291,7 +292,7 @@ function SeriesReport({ series, target, correlation, onRemove }: { series: WindS
   if (report.ignoredColumns.length) rows.push(['Ignored columns', report.ignoredColumns.join(', ')])
   if (correlation !== undefined) rows.push(['Correlation r', `${fmtNum(correlation, 3)} with the target, outside the outage`])
   if (target) rows.push(['Power curve', <CurveSelect target={series.id} />])
-  return <Facts title={series.id} rows={rows} action={<Remove what={series.id} onClick={onRemove} />} />
+  return <Facts title={<SeriesName id={series.id} />} rows={rows} action={<Remove what={store.nameOf(series.id)} onClick={onRemove} />} />
 }
 
 function curveOption({ windMs, powerKw }: PowerCurve, t: ChartTheme) {
@@ -407,7 +408,7 @@ const Stations = observer(function Stations() {
               size="sm"
               variant={stations.includes(s.id) ? 'default' : 'outline'}
               disabled={!covers(s) && !stations.includes(s.id)}
-              title={covers(s) ? seriesLine(s) : `Does not cover the outage of ${target?.id}`}
+              title={covers(s) ? seriesLine(s) : `Does not cover the outage of ${target && store.nameOf(target.id)}`}
               onClick={() => store.toggleStation(s.id)}
             >
               {s.id.replace('DWD_', '')}

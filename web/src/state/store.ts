@@ -47,6 +47,8 @@ export const RootStore = types
     roleCurves: types.frozen<UploadedCurve[]>([]),
     /** The curve the user picked per target id, by name; other targets use `defaultCurve`. */
     curveChoice: types.frozen<Record<string, string>>({}),
+    /** Names the user gave series, by the id from the files; the id stays the key everywhere in the store. */
+    names: types.frozen<Record<string, string>>({}),
     nTurbines: 1,
     /** False after a power curve came from files: the turbine count is a decision the user must make. */
     turbinesConfirmed: true,
@@ -86,6 +88,9 @@ export const RootStore = types
     get usedReferences(): WindSeries[] {
       return [...self.references, ...self.dwd.filter((s) => self.stations.includes(s.id))]
     },
+    nameOf(id: string) {
+      return self.names[id] ?? id
+    },
     label(name: string) {
       return self.models.find((m) => m.name === name)?.label ?? name
     },
@@ -102,10 +107,13 @@ export const RootStore = types
     },
   }))
   .views((self) => ({
+    /** By target id; the series in them carry the names the user gave, so charts, report, email and CSV show those. */
     get datasets(): Record<string, Dataset> {
-      const { nTurbines, usedReferences } = self
+      const { nTurbines, usedReferences, names } = self
       if (!usedReferences.length) return {}
-      return Object.fromEntries(self.targets.map((t) => [t.id, buildDataset(t, usedReferences, self.curveOf(t.id).curve, nTurbines)]))
+      const named = (s: WindSeries) => (names[s.id] ? { ...s, id: names[s.id] } : s)
+      const references = usedReferences.map(named)
+      return Object.fromEntries(self.targets.map((t) => [t.id, buildDataset(named(t), references, self.curveOf(t.id).curve, nTurbines)]))
     },
     /** Every model's response for the target on view. */
     get results(): Record<string, AnalyzeResponse> {
@@ -119,7 +127,7 @@ export const RootStore = types
     /** Every target with the selected model's result. */
     get cases(): Case[] {
       return self.targets.map(({ id }) => ({
-        id,
+        id: self.nameOf(id),
         dataset: self.datasets[id],
         outage: self.outage,
         response: self.resultsByTarget[id]?.[self.model],
@@ -145,7 +153,7 @@ export const RootStore = types
     },
     /** The targets the report covers: all of them under Total, else the one on view. */
     get reportCases(): Case[] {
-      return self.showsTotal ? self.cases : self.cases.filter((c) => c.id === self.target?.id)
+      return self.showsTotal ? self.cases : self.cases.filter((_, i) => self.targets[i] === self.target)
     },
     get status(): 'idle' | 'running' | 'error' {
       if (self.response) return 'idle'
@@ -165,7 +173,7 @@ export const RootStore = types
     /** The checks of the target on view, or under Total of every target, each named. */
     get warnings() {
       if (!self.showsTotal) return self.target ? self.warningsOf(self.target.id) : []
-      return self.targets.flatMap((t) => self.warningsOf(t.id).map((w) => ({ ...w, title: `${t.id}: ${w.title}` })))
+      return self.targets.flatMap((t) => self.warningsOf(t.id).map((w) => ({ ...w, title: `${self.nameOf(t.id)}: ${w.title}` })))
     },
   }))
   .actions((self) => ({
@@ -194,6 +202,16 @@ export const RootStore = types
         self.turbinesSource = stated?.name
         self.turbinesConfirmed = false
       }
+    },
+    /** Returns why the name cannot be used; it goes into file names and the CSV, and must tell the series apart. */
+    rename(id: string, name: string): string | undefined {
+      const trimmed = name.trim()
+      if (!trimmed) return 'The name cannot be empty.'
+      if (/[,/\\:*?"<>|]/.test(trimmed)) return 'The name cannot contain , / \\ : * ? " < > |'
+      const others = [...self.targets, ...self.references, ...self.dwd].filter((s) => s.id !== id)
+      if (others.some((s) => s.id === trimmed || self.names[s.id] === trimmed)) return `Another series is already called ${trimmed}.`
+      const { [id]: _, ...names } = self.names
+      self.names = trimmed === id ? names : { ...names, [id]: trimmed }
     },
     chooseCurve(target: string, name: string) {
       self.curveChoice = { ...self.curveChoice, [target]: name }

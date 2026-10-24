@@ -8,15 +8,14 @@ import { store } from '@/state/store'
 
 /** Harness result behind the recommendation (SPEC.md, Modellarchitektur); update together with registry.RECOMMENDED. */
 export const BENCHMARK = {
-  run: '24 Oct 2026, commit 1a9b2d0 with the changes of that day',
-  scenarios: 645,
-  datasets: 10,
+  run: '24 Oct 2026, commit 3f63a9a',
+  scenarios: 207,
   rows: [
-    { model: 'sector_regression', score: 0.64, energyPct: 24 },
-    { model: 'multi_regression', score: 0.64, energyPct: 24 },
-    { model: 'linear_regression', score: 0.67, energyPct: 25 },
-    { model: 'variance_ratio', label: 'Variance ratio (MCP), comparison only', score: 0.72, energyPct: 31 },
-    { model: 'identity', label: 'Reference wind as is (baseline)', score: 1, energyPct: 118 },
+    { model: 'sector_regression', score: 0.57, energyPct: 7.6 },
+    { model: 'multi_regression', score: 0.59, energyPct: 8.7 },
+    { model: 'linear_regression', score: 0.67, energyPct: 13.5 },
+    { model: 'variance_ratio', label: 'Variance ratio (MCP), comparison only', score: 0.69, energyPct: 12.5 },
+    { model: 'identity', label: 'Reference wind as is (baseline)', score: 1, energyPct: 40.4 },
   ],
 }
 
@@ -127,11 +126,10 @@ export const HowItWorks = observer(function HowItWorks() {
         <section className="flex flex-col gap-3 border-t px-4 pt-5 pb-4">
           <h3 className="font-medium">How we chose the method</h3>
           <p className="text-pretty">
-            Our test harness hides the measurements of {BENCHMARK.scenarios.toLocaleString('en-US')} simulated outages from 6 h to 5 days on{' '}
-            {BENCHMARK.datasets} datasets (a synthetic pair with known truth, the demo data, 5 real pairs of German weather stations 29–41
-            km apart and the three challenge turbines T1–T3 with seven reference turbines each) and compares every method with the reference as is. The score averages wind RMSE and MAE, power RMSE and MAE and the
-            energy error relative to that baseline: 1 is the baseline, lower is better. The accuracy in Results repeats this test on your
-            data.
+            Our test harness hides the measurements of the three challenge turbines T1–T3 in {BENCHMARK.scenarios} simulated outages from 6 h
+            to 5 days, learns from the data before and after each one with the seven reference turbines of parks H and O, and compares every
+            method with the reference wind as is. The score averages wind RMSE and MAE, power RMSE and MAE and the energy error relative to
+            that baseline: 1 is the baseline, lower is better. The accuracy in Results repeats this test on your data.
           </p>
           <table className="w-full text-left tabular-nums">
             <thead className="text-label text-muted-foreground">
@@ -146,15 +144,16 @@ export const HowItWorks = observer(function HowItWorks() {
                 <tr key={model} className="border-b last:border-0">
                   <td className="py-1.5 pr-3">{label ?? store.label(model)}</td>
                   <td className="px-3 py-1.5 text-right">{score.toFixed(2)}</td>
-                  <td className="py-1.5 pl-3 text-right">{energyPct} %</td>
+                  <td className="py-1.5 pl-3 text-right">{energyPct.toFixed(1)} %</td>
                 </tr>
               ))}
             </tbody>
           </table>
           <p className="text-pretty">
-            Weights per wind direction win on wind and on energy, most clearly where a neighbouring turbine shades the target from one
-            direction. Variance ratio keeps the spread of the wind, but averaging the power over the uncertainty already gives that spread
-            back to the regression.
+            Weighting all seven references beats picking the best one. Weights per wind direction add most at T1, which a neighbouring
+            turbine shades from the west: its energy error falls from 11.6 % to 9.2 %. Variance ratio keeps the spread of the wind, but
+            averaging the power over the uncertainty gives that spread back a second time, so it overestimates the energy. On our other
+            test data (synthetic, demo, German weather stations) there is one reference and no wind direction, and the regressions coincide.
           </p>
           <p className="text-label text-muted-foreground">Harness run of {BENCHMARK.run}.</p>
         </section>

@@ -193,7 +193,7 @@ function ModelRow({ info, selected, cells }: { info: ModelInfo; selected: boolea
         </span>
         <span className="hidden pl-5 text-label text-muted-foreground sm:block">
           {info.tagline}
-          {info.recommended && ` Best score on our benchmark of ${BENCHMARK.datasets} datasets (see How it works).`}
+          {info.recommended && ` Best score in ${BENCHMARK.scenarios} simulated outages of the challenge turbines T1–T3 (see How it works).`}
         </span>
       </td>
       {cells.map((text, i) => (

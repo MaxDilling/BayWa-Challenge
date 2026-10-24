@@ -218,7 +218,7 @@ interface AnalyzeResponse {
 
 **Einfluss der Lage:** `kwhP50WithoutDirection` ist der P50 desselben angepassten Modells, wenn es im Ausfall keine Windrichtung bekommt (`predict` mit `extra = None`); bei `multi_regression` heißt das Windschatten-Faktor 1 in jedem Sektor. `kwhP50 − kwhP50WithoutDirection` ist also, was Windschatten und Gelände je Richtung am Verlust ändern. Modelle ohne Richtungen liefern beide Werte gleich. Das Feld fehlt, wenn keine Referenz eine Richtung hat.
 
-**Modelle in beiden Engines:** `identity` (Ziel = Referenz, Baseline), `linear_regression`, `variance_ratio`, `multi_regression` und `sector_regression` (Standard der GUI), alle mit kalibriertem σ (S3). `ModelInfo` kommt aus der Registry (`registry.info()`): `label` und `tagline` je Modellklasse, `recommended` für genau das Modell in `registry.RECOMMENDED` (bestes Harness-Ergebnis, Standard der GUI). `fixtures/models.json` hält die Liste fest; die `ts`-Engine muss sie gleich liefern.
+**Modelle in beiden Engines:** `linear_regression`, `multi_regression` und `sector_regression` (Standard der GUI), alle mit kalibriertem σ (S3). `ModelInfo` kommt aus der Registry (`registry.info()`): `label` und `tagline` je Modellklasse, `recommended` für genau das Modell in `registry.RECOMMENDED` (bestes Harness-Ergebnis, Standard der GUI). `fixtures/models.json` hält die Liste fest; die `ts`-Engine muss sie gleich liefern.
 
 ## Modellarchitektur
 
@@ -445,7 +445,7 @@ Die komplette Kette steht mit synthetischen Daten, Demo-Daten und fünf DWD-Paar
 CLAUDE.md  SPEC.md  CHALLENGE.md  Makefile  pyproject.toml  uv.lock
 windgap/                    Python-Kern, Pyodide-kompatibel, einziger Inhalt des Wheels
   core/      schema.py  grid.py  powercurve.py  energy.py  metrics.py  io.py  outage.py
-  models/    CLAUDE.md  base.py  registry.py  identity.py  linear.py
+  models/    CLAUDE.md  base.py  registry.py  linear.py  multi.py  sector.py
   backtest.py               fold() + backtest(), gemeinsam für Engine-Validierung und Harness
   engine.py                 handle(request_json) -> response_json, list_models()
 harness/                    nur nativ: CLAUDE.md  __main__.py (CLI)  run.py (Szenarien, Leaderboard)  datasets.py  synthetic.py  fixtures.py  demo.py  dwd.py  predict.py (Abgabe-CLI)  (benchmarks/)

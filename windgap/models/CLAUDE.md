@@ -4,7 +4,7 @@ Kontrakt S3 und Modellleiter M0–M7 stehen in `SPEC.md`. Hier steht nur, was be
 
 ## Ein Modell hinzufügen
 
-1. Eine Datei `windgap/models/<name>.py` mit einer Klasse mit `@register("<name>")` und den Klassenattributen `label` (für Menschen, z. B. „Variance ratio (MCP)“) und `tagline` (eine Zeile). Die Registry findet sie automatisch, sodass sie in Harness, Engine und GUI auftaucht. Empfohlen ist genau `registry.RECOMMENDED`.
+1. Eine Datei `windgap/models/<name>.py` mit einer Klasse mit `@register("<name>")` und den Klassenattributen `label` (für Menschen, z. B. „Linear regression (MCP)“) und `tagline` (eine Zeile). Die Registry findet sie automatisch, sodass sie in Harness, Engine und GUI auftaucht. Empfohlen ist genau `registry.RECOMMENDED`.
 2. Hyperparameter sind Konstruktor-Argumente mit Standardwert (`__init__(self, lag_max_min: int = 60)`). Die Engine reicht `params` aus der Anfrage als Keyword-Argumente durch. Varianten (LR mit und ohne Lag) sind Parameter, keine zweite Datei.
 3. `fit` setzt `self.errors = calibrate(x, y, fit_line)` aus `base.py`: `fit_line(x, y)` passt den Mittelwert an und gibt `v ↦ v̂` zurück; `calibrate` misst damit σ und das Fehlergedächtnis auf ungesehenen Blöcken (S3). Kein eigenes σ.
 4. `predict` gibt `gaussian_prediction(mean, self.errors.sigma(mean), refs.index)` zurück, außer das Modell hat eine eigene Verteilung. Spalten `mean, std, q10, q50, q90`, Index = `refs.index`, alles ≥ 0.

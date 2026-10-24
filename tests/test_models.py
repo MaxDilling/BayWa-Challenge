@@ -58,10 +58,9 @@ def test_sigma_grows_with_the_predicted_wind():
     assert errors.sigma_slope == pytest.approx(0.1 / Z90)
 
 
-@pytest.mark.parametrize("name", ["linear_regression", "variance_ratio"])
-def test_linear_models_recover_line_and_delay(name):
+def test_linear_regression_recovers_line_and_delay():
     target = 2 + 0.5 * REF.shift(2)  # reaches the target 20 minutes later
-    model = registry.create(name).fit(target, REF.to_frame())
+    model = registry.create("linear_regression").fit(target, REF.to_frame())
     explanation = model.explain()
     assert explanation.params == pytest.approx({"a": 2.0, "b": 0.5})
     assert explanation.diagnostics["lag_min"] == 20

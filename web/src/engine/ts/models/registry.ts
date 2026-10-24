@@ -1,8 +1,7 @@
 // windgap/models/registry.py: the ported subset, under the same names.
 import type { ModelInfo } from '../../contract'
 import type { WindModel } from './base'
-import { Identity } from './identity'
-import { LinearRegression, VarianceRatio } from './linear'
+import { LinearRegression } from './linear'
 import { MultiRegression } from './multi'
 import { SectorRegression } from './sector'
 
@@ -12,11 +11,6 @@ const lagMax = (p: Params) => (p.lag_max_min === undefined ? undefined : Number(
 const sectors = (p: Params) => (p.direction_sectors === undefined ? undefined : Number(p.direction_sectors))
 
 const MODELS: Record<string, { label: string; tagline: string; create: (p: Params) => WindModel }> = {
-  identity: {
-    label: 'Reference as is (baseline)',
-    tagline: 'Takes the reference wind unchanged; every other method must beat it.',
-    create: () => new Identity(),
-  },
   linear_regression: {
     label: 'Linear regression (MCP)',
     tagline: 'Least-squares line through the reference wind, shifted by the delay between the farms.',
@@ -31,11 +25,6 @@ const MODELS: Record<string, { label: string; tagline: string; create: (p: Param
     label: 'Multiple regression by wind direction (MCP)',
     tagline: 'Least-squares weights over all reference farms, fitted separately for each wind direction sector.',
     create: (p) => new SectorRegression(lagMax(p), sectors(p)),
-  },
-  variance_ratio: {
-    label: 'Variance ratio (MCP)',
-    tagline: "Line that keeps the target's mean and spread, shifted by the delay between the farms.",
-    create: (p) => new VarianceRatio(lagMax(p)),
   },
 }
 

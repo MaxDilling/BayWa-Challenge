@@ -39,7 +39,7 @@ def test_model_list_is_current():
 
 
 def test_prediction_spans_outage():
-    request = fixtures.cases("identity")["basic"]
+    request = fixtures.cases("linear_regression")["basic"]
     response = json.loads(handle(json.dumps(request)))
     steps = (request["outage"]["endMs"] - request["outage"]["startMs"]) // 600_000
     assert len(response["prediction"]["mean"]) == len(response["energy"]["cumulativeKwh"]) == steps
@@ -49,7 +49,7 @@ def test_prediction_spans_outage():
 
 
 def test_refuses_an_outage_without_a_day_of_target_data_outside_it():
-    request = fixtures.cases("identity")["basic"]
+    request = fixtures.cases("linear_regression")["basic"]
     request["outage"]["startMs"] = request["target"]["t0"] + 143 * 600_000
     request["outage"]["endMs"] = request["target"]["t0"] + len(request["target"]["values"]) * 600_000
     with pytest.raises(ValueError, match="143 values outside the outage"):

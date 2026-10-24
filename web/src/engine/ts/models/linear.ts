@@ -77,15 +77,3 @@ export class LinearRegression extends Linear {
     return [mean(y) - b * mean(x), b]
   }
 }
-
-export class VarianceRatio extends Linear {
-  protected summary =
-    "The missing wind speed follows a straight line through the reference wind speed that keeps the target's " +
-    'average and spread from the training period: b is the ratio of their standard deviations. The reference is ' +
-    'shifted by the delay τ at which both farms agree best.'
-  protected coefficients: Coefficients = (x, y) => {
-    const [cx, cy] = [centered(x), centered(y)]
-    const b = Math.sqrt(dot(cy, cy) / dot(cx, cx))
-    return [mean(y) - b * mean(x), b]
-  }
-}

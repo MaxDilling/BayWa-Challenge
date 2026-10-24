@@ -12,11 +12,11 @@ export const BENCHMARK = {
   scenarios: 645,
   datasets: 10,
   rows: [
-    { model: 'sector_regression', variant: '', score: 0.64, energyPct: 24 },
-    { model: 'multi_regression', variant: '', score: 0.64, energyPct: 24 },
-    { model: 'linear_regression', variant: '', score: 0.67, energyPct: 25 },
-    { model: 'variance_ratio', variant: '', score: 0.72, energyPct: 31 },
-    { model: 'identity', variant: '', score: 1, energyPct: 118 },
+    { model: 'sector_regression', score: 0.64, energyPct: 24 },
+    { model: 'multi_regression', score: 0.64, energyPct: 24 },
+    { model: 'linear_regression', score: 0.67, energyPct: 25 },
+    { model: 'variance_ratio', label: 'Variance ratio (MCP), comparison only', score: 0.72, energyPct: 31 },
+    { model: 'identity', label: 'Reference wind as is (baseline)', score: 1, energyPct: 118 },
   ],
 }
 
@@ -142,11 +142,9 @@ export const HowItWorks = observer(function HowItWorks() {
               </tr>
             </thead>
             <tbody>
-              {BENCHMARK.rows.map(({ model, variant, score, energyPct }) => (
-                <tr key={model + variant} className="border-b last:border-0">
-                  <td className="py-1.5 pr-3">
-                    {store.label(model)} {variant}
-                  </td>
+              {BENCHMARK.rows.map(({ model, label, score, energyPct }) => (
+                <tr key={model} className="border-b last:border-0">
+                  <td className="py-1.5 pr-3">{label ?? store.label(model)}</td>
                   <td className="px-3 py-1.5 text-right">{score.toFixed(2)}</td>
                   <td className="py-1.5 pl-3 text-right">{energyPct} %</td>
                 </tr>
@@ -154,8 +152,9 @@ export const HowItWorks = observer(function HowItWorks() {
             </tbody>
           </table>
           <p className="text-pretty">
-            Linear regression wins on wind and on energy. Variance ratio keeps the spread of the wind, but averaging the power over the
-            uncertainty already gives that spread back to the regression.
+            Weights per wind direction win on wind and on energy, most clearly where a neighbouring turbine shades the target from one
+            direction. Variance ratio keeps the spread of the wind, but averaging the power over the uncertainty already gives that spread
+            back to the regression.
           </p>
           <p className="text-label text-muted-foreground">Harness run of {BENCHMARK.run}.</p>
         </section>

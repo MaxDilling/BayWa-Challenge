@@ -31,7 +31,7 @@ export interface AnalyzeRequest {
   powerCurve: { windMs: number[]; powerKw: number[]; nTurbines: number }
   /** endMs exclusive */
   outage: { startMs: number; endMs: number }
-  /** Registry name, e.g. "variance_ratio" */
+  /** Registry name, e.g. "sector_regression" */
   model: string
   params?: Record<string, number | string>
 }

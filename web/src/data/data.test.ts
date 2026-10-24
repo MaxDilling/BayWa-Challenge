@@ -40,7 +40,7 @@ describe.each(outageCases.detect)('fixtures/outage detect: $name', ({ target, re
 describe.each(outageCases.fill)('fixtures/outage fill: $name', ({ reference, outage, values, error }) => {
   it('matches', () => {
     const dataset = buildDataset({ ...series([1]), id: 'target' }, [{ ...series([1]), id: 'ref', grid: reference }], { windMs: [3, 12], powerKw: [0, 3000] })
-    const fill = () => toRequest(dataset, outage, 'identity').references[0].grid.values
+    const fill = () => toRequest(dataset, outage, 'linear_regression').references[0].grid.values
     if (error) expect(fill).toThrow(error)
     else expect(fill()).toEqual(values)
   })
@@ -72,7 +72,7 @@ describe('demo data', () => {
   it('flows from CSV through outage detection into the ts engine', () => {
     const dataset = loadDemo()
     expect(dataset.outages[0]).toEqual({ startMs: Date.UTC(2026, 9, 27, 7), endMs: Date.UTC(2026, 9, 28, 13) })
-    const response = analyze(toRequest(dataset, dataset.outages[0], 'identity'))
+    const response = analyze(toRequest(dataset, dataset.outages[0], 'linear_regression'))
     expect(response.prediction.mean).toHaveLength(180)
     expect(response.energy.kwhP50).toBeGreaterThan(0)
   })

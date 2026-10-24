@@ -1,5 +1,6 @@
-"""M1–M3: v̂_t = a + b · v_r(t − τ). Linear regression and variance ratio differ only in how (a, b) are chosen;
-the reference r and the delay τ are chosen on the training data alone, where target and reference correlate best."""
+"""M1–M3: v̂_t = a + b · v_r(t − τ). A subclass chooses (a, b), here least squares; variance ratio in
+harness/benchmarks keeps the spread instead. The reference r and the delay τ are chosen on the training data alone,
+where target and reference correlate best."""
 
 from typing import Self
 
@@ -62,18 +63,3 @@ class LinearRegression(_Linear):
     def coefficients(x: np.ndarray, y: np.ndarray) -> tuple[float, float]:
         b = float(np.cov(x, y)[0, 1] / np.var(x, ddof=1))
         return float(y.mean() - b * x.mean()), b
-
-
-@register("variance_ratio")
-class VarianceRatio(_Linear):
-    label = "Variance ratio (MCP)"
-    tagline = "Line that keeps the target's mean and spread, shifted by the delay between the farms."
-    summary = ("The missing wind speed follows a straight line through the reference wind speed that keeps the "
-               "target's average and spread from the training period: b is the ratio of their standard deviations. "
-               "The reference is shifted by the delay τ at which both farms agree best.")
-
-    @staticmethod
-    def coefficients(x: np.ndarray, y: np.ndarray) -> tuple[float, float]:
-        b = float(np.std(y) / np.std(x))
-        return float(y.mean() - b * x.mean()), b
-
